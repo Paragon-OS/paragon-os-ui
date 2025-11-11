@@ -2,11 +2,19 @@ This is the [assistant-ui](https://github.com/Yonom/assistant-ui) starter projec
 
 ## Getting Started
 
-First, add your OpenAI API key to `.env.local` file:
+First, add your API key(s) to `.env.local`:
 
 ```
-OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# Gemini (default)
+GOOGLE_GENERATIVE_AI_API_KEY=your-gemini-api-key
+
+# Optional: keep OpenAI support by wiring your key as well
+# OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
+
+By default the chat endpoint uses Gemini `models/gemini-1.5-flash`. You can switch
+to another Google model (for example, `models/gemini-1.5-pro`) by updating
+`app/api/chat/route.ts`.
 
 Then, run the development server:
 
