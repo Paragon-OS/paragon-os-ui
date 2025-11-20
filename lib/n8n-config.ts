@@ -1,0 +1,98 @@
+/**
+ * n8n Workflow Configuration
+ * Maps workflow names to webhook URLs and defines confirmation requirements
+ */
+
+import { buildWebhookUrl } from "./n8n-client";
+
+export interface WorkflowConfig {
+  webhookPath?: string;
+  webhookUrl?: string;
+  workflowId?: string;
+  requiresConfirmation: boolean;
+  description: string;
+  method?: "GET" | "POST";
+}
+
+export type WorkflowName =
+  | "answerQuestion"
+  | "sendMessage"
+  | "generateTriage"
+  | "callN8nWorkflow";
+
+/**
+ * Workflow configurations
+ * Add your n8n workflow webhook paths or URLs here
+ */
+export const workflowConfigs: Record<WorkflowName, WorkflowConfig> = {
+  answerQuestion: {
+    // Update this with your actual webhook path for the Q&A workflow
+    webhookPath: "/answer-question",
+    requiresConfirmation: false,
+    description: "Answer a question using personal Telegram & Discord chat history",
+    method: "POST",
+  },
+  sendMessage: {
+    // Update this with your actual webhook path for sending messages
+    webhookPath: "/send-message",
+    requiresConfirmation: true,
+    description: "Send a message via Telegram or Discord",
+    method: "POST",
+  },
+  generateTriage: {
+    // Update this with your actual webhook path for generating triages
+    webhookPath: "/generate-triage",
+    requiresConfirmation: false,
+    description: "Generate a triage from context",
+    method: "POST",
+  },
+  callN8nWorkflow: {
+    // Generic workflow caller - uses provided webhook URL directly
+    requiresConfirmation: false,
+    description: "Call any n8n workflow via webhook URL",
+    method: "POST",
+  },
+};
+
+/**
+ * Get workflow configuration by name
+ */
+export function getWorkflowConfig(
+  workflowName: WorkflowName,
+): WorkflowConfig | null {
+  return workflowConfigs[workflowName] || null;
+}
+
+/**
+ * Get webhook URL for a workflow
+ */
+export function getWorkflowWebhookUrl(workflowName: WorkflowName): string | null {
+  const config = getWorkflowConfig(workflowName);
+  if (!config) return null;
+
+  if (config.webhookUrl) {
+    return config.webhookUrl;
+  }
+
+  if (config.webhookPath) {
+    return buildWebhookUrl(config.webhookPath);
+  }
+
+  return null;
+}
+
+/**
+ * Check if a workflow requires confirmation
+ */
+export function requiresConfirmation(workflowName: WorkflowName): boolean {
+  const config = getWorkflowConfig(workflowName);
+  return config?.requiresConfirmation ?? false;
+}
+
+/**
+ * Get workflow description
+ */
+export function getWorkflowDescription(workflowName: WorkflowName): string {
+  const config = getWorkflowConfig(workflowName);
+  return config?.description ?? "Unknown workflow";
+}
