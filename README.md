@@ -34,6 +34,10 @@ N8N_WEBHOOK_BASE_URL=http://localhost:5678/webhook
 # Optional: Synchronous execution settings
 # N8N_WAIT_FOR_COMPLETION=true  # Wait for workflow completion (default: true)
 # N8N_POLL_INTERVAL=500         # Polling interval in ms (default: 500ms)
+
+# Optional: Streaming server configuration (for real-time workflow updates)
+# N8N_STREAMING_SERVER_URL=http://localhost:3001
+# N8N_STREAMING_CONNECTION_TYPE=websocket  # 'websocket' or 'sse' (default: websocket)
 ```
 
 ### Setting Up Workflows
@@ -67,6 +71,77 @@ Once configured, you can ask the AI assistant to:
 - "Generate a triage for: [context]"
 
 The assistant will automatically call the appropriate n8n workflows and display the results in the chat interface.
+
+### Real-Time Streaming Updates (NEW)
+
+The n8n client now supports real-time streaming updates, allowing you to get immediate execution IDs and receive progress updates as workflows execute.
+
+#### Features
+
+- **Immediate Response**: Get workflow ID and execution ID as soon as the workflow starts
+- **Real-Time Updates**: Receive progress updates while the workflow is running
+- **Callback-Based**: Use callbacks to handle start, update, complete, and error events
+- **Multiple Executions**: Track multiple concurrent workflow executions simultaneously
+
+#### Setup
+
+1. **Start the Streaming Server**: Run the streaming server (requires Node.js):
+   ```bash
+   cd streaming-server
+   npm install
+   node server.js
+   ```
+   The server will start on `http://localhost:3001`
+
+2. **Configure n8n Workflows**: Add HTTP Request nodes in your n8n workflows to send updates:
+   ```json
+   {
+     "method": "POST",
+     "url": "http://localhost:3001/stream/update",
+     "body": {
+       "executionId": "{{ $execution.id }}",
+       "stage": "processing",
+       "status": "in_progress",
+       "message": "Processing data...",
+       "timestamp": "{{ $now }}",
+       "data": { "progress": 50 }
+     }
+   }
+   ```
+
+3. **Use Streaming in Your Code**:
+   ```typescript
+   import { callN8nWorkflow } from '@/lib/n8n-client';
+
+   const result = await callN8nWorkflow({
+     webhookUrl: 'http://localhost:5678/webhook/my-workflow',
+     method: 'POST',
+     payload: { input: 'data' },
+     streaming: {
+       onStart: (executionId, workflowId) => {
+         console.log('Started:', executionId);
+       },
+       onUpdate: (update) => {
+         console.log('Update:', update.stage, update.message);
+       },
+       onComplete: (result, executionId) => {
+         console.log('Completed:', result);
+       },
+       onError: (error) => {
+         console.error('Error:', error);
+       },
+     },
+   });
+
+   // Result returned immediately with execution IDs
+   console.log('Execution ID:', result.executionId);
+   ```
+
+#### Documentation
+
+- **Usage Guide**: See `lib/n8n-client/STREAMING_USAGE.md` for comprehensive examples
+- **Integration Examples**: See `lib/n8n-client/EXAMPLE_STREAMING_INTEGRATION.ts` for code samples
+- **Demo Server**: The streaming server includes a demo UI at `http://localhost:3001`
 
 ## Development
 

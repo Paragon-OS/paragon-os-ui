@@ -3,7 +3,7 @@
  * Handles calling n8n workflows via webhooks
  */
 
-import type { N8nWorkflowResponse } from "./types";
+import type { N8nWorkflowResponse, StreamingCallbacks } from "./types";
 import { DEFAULT_TIMEOUT, shouldWaitForCompletion } from "./config";
 import {
   extractExecutionId,
@@ -15,6 +15,7 @@ import {
   findLatestExecutionByTime,
   pollExecutionStatus,
 } from "./execution";
+import { getStreamingClient } from "./streaming";
 
 // Constants
 const EXECUTION_LOOKUP_BUFFER_MS = 10000; // 10 seconds buffer for timing issues
@@ -145,6 +146,7 @@ export async function callWebhook(
   payload?: Record<string, unknown>,
   timeout: number = DEFAULT_TIMEOUT,
   waitForCompletion?: boolean,
+  streamingCallbacks?: StreamingCallbacks,
 ): Promise<N8nWorkflowResponse> {
   const startTime = Date.now();
 
@@ -189,6 +191,71 @@ export async function callWebhook(
       return { message: "Workflow executed successfully" };
     });
 
+    // Extract execution ID and workflow ID early
+    const executionIdFromData = extractExecutionId(data);
+    const executionIdFromHeader = executionIdHeader;
+    let executionId = executionIdFromHeader || executionIdFromData;
+    const workflowId = extractWorkflowIdFromUrl(webhookUrl);
+
+    // Handle streaming mode - return immediately with IDs and set up callbacks
+    if (streamingCallbacks) {
+      logger.info("Streaming mode enabled");
+      
+      // If no execution ID in response, try to find it via API lookup
+      if (!executionId) {
+        logger.info("No execution ID found in response, attempting API lookup");
+        executionId = await findExecutionViaApi(workflowId, startTime);
+      }
+
+      if (executionId) {
+        logger.info(`Setting up streaming for execution: ${executionId}`);
+        
+        // Call onStart callback immediately
+        if (streamingCallbacks.onStart) {
+          try {
+            streamingCallbacks.onStart(executionId, workflowId || undefined);
+          } catch (error) {
+            logger.error("Error in onStart callback:", error);
+          }
+        }
+
+        // Subscribe to streaming updates
+        const streamingClient = getStreamingClient();
+        streamingClient.subscribe(executionId, streamingCallbacks);
+
+        // Return immediately with execution IDs
+        return {
+          success: true,
+          executionId,
+          ...(workflowId && { workflowId }),
+          streaming: true,
+          data: {
+            message: "Workflow started, streaming updates enabled",
+            executionId,
+            workflowId,
+          },
+        };
+      } else {
+        // Could not find execution ID, call onError
+        const errorMsg = "Could not determine execution ID for streaming";
+        logger.error(errorMsg);
+        
+        if (streamingCallbacks.onError) {
+          try {
+            streamingCallbacks.onError(errorMsg);
+          } catch (error) {
+            logger.error("Error in onError callback:", error);
+          }
+        }
+
+        return {
+          success: false,
+          error: errorMsg,
+          ...(workflowId && { workflowId }),
+        };
+      }
+    }
+
     // Check if we should wait for completion and if response indicates async execution
     const shouldWait =
       waitForCompletion !== undefined
@@ -199,18 +266,13 @@ export async function callWebhook(
     logger.info(`Is async response: ${isAsyncResponse(data)}`);
 
     if (shouldWait && isAsyncResponse(data)) {
-      // Try to extract execution ID from multiple sources
-      const executionIdFromData = extractExecutionId(data);
-      let executionId = executionIdHeader || executionIdFromData;
-
-      logger.info(`Execution ID from header: ${executionIdHeader}`);
+      logger.info(`Execution ID from header: ${executionIdFromHeader}`);
       logger.info(`Execution ID from data: ${executionIdFromData}`);
       logger.info(`Initial execution ID: ${executionId}`);
 
       // If no execution ID in response, try to find it by workflow ID (requires API key)
       if (!executionId) {
         logger.info("No execution ID found in response");
-        const workflowId = extractWorkflowIdFromUrl(webhookUrl);
         logger.info(`Extracted workflow ID from URL: ${workflowId}`);
 
         executionId = await findExecutionViaApi(workflowId, startTime);
@@ -234,20 +296,18 @@ export async function callWebhook(
       }
 
       // Could not find execution ID
-      const workflowId = extractWorkflowIdFromUrl(webhookUrl);
       return handleAsyncResponseWithoutExecution(data, workflowId, webhookResponseTime);
     }
 
     // Synchronous response or waiting disabled
     // Include execution ID if available from headers or response data
-    const executionIdFromData = extractExecutionId(data);
-    const finalExecutionId = executionIdHeader || executionIdFromData;
-    logger.info(`Synchronous response - final execution ID: ${finalExecutionId}`);
+    logger.info(`Synchronous response - final execution ID: ${executionId}`);
 
     return {
       success: true,
       data,
-      ...(finalExecutionId && { executionId: finalExecutionId }),
+      ...(executionId && { executionId }),
+      ...(workflowId && { workflowId }),
     };
   } catch (error) {
     if (error instanceof Error) {

@@ -6,6 +6,8 @@
 export const DEFAULT_TIMEOUT = 60000; // 60 seconds (increased for long-running workflows)
 export const DEFAULT_POLL_INTERVAL = 500; // 500ms between polls
 const DEFAULT_N8N_BASE_URL = "http://localhost:5678";
+const DEFAULT_STREAMING_SERVER_URL = "http://localhost:3001";
+const DEFAULT_STREAMING_CONNECTION_TYPE = "websocket";
 
 /**
  * Get the n8n base URL from environment variables
@@ -42,5 +44,20 @@ export function shouldWaitForCompletion(): boolean {
  */
 export function getApiKey(): string | undefined {
   return process.env.N8N_API_KEY;
+}
+
+/**
+ * Get streaming server URL from environment variables
+ */
+export function getStreamingServerUrl(): string {
+  return process.env.N8N_STREAMING_SERVER_URL || DEFAULT_STREAMING_SERVER_URL;
+}
+
+/**
+ * Get streaming connection type preference from environment variables
+ */
+export function getStreamingConnectionType(): "websocket" | "sse" {
+  const type = process.env.N8N_STREAMING_CONNECTION_TYPE;
+  return type === "sse" ? "sse" : DEFAULT_STREAMING_CONNECTION_TYPE;
 }
 

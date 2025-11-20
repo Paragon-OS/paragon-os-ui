@@ -8,6 +8,7 @@ import { DEFAULT_TIMEOUT } from "./config";
 import { callWebhook } from "./webhook";
 import { callLocalApi } from "./api";
 import { getWebhookBaseUrl, getN8nBaseUrl } from "./config";
+import { getStreamingClient, createStreamingClient } from "./streaming";
 
 /**
  * Main function to call an n8n workflow
@@ -22,15 +23,20 @@ export async function callN8nWorkflow(
     payload,
     timeout = DEFAULT_TIMEOUT,
     waitForCompletion,
+    streaming,
   } = options;
 
   // Prefer webhook URL if provided
   if (webhookUrl) {
-    return callWebhook(webhookUrl, method, payload, timeout, waitForCompletion);
+    return callWebhook(webhookUrl, method, payload, timeout, waitForCompletion, streaming);
   }
 
   // Fall back to local API if workflow ID is provided
   if (workflowId) {
+    // Note: streaming not supported for local API calls
+    if (streaming) {
+      console.warn("[n8n-client] Streaming mode not supported for local API calls, ignoring streaming callbacks");
+    }
     return callLocalApi(workflowId, method, payload, timeout);
   }
 
@@ -54,5 +60,13 @@ export function buildWebhookUrl(webhookPath: string): string {
 }
 
 // Re-export types for convenience
-export type { N8nWorkflowCallOptions, N8nWorkflowResponse } from "./types";
+export type { 
+  N8nWorkflowCallOptions, 
+  N8nWorkflowResponse,
+  StreamUpdate,
+  StreamingCallbacks,
+} from "./types";
+
+// Re-export streaming functionality
+export { getStreamingClient, createStreamingClient };
 
