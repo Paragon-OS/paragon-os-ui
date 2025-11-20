@@ -16,6 +16,8 @@ export interface N8nWorkflowResponse {
   success: boolean;
   data?: unknown;
   error?: string;
+  executionId?: string; // Execution ID when available
+  workflowId?: string; // Workflow ID extracted from webhook URL
 }
 
 /**

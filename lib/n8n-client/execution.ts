@@ -6,6 +6,22 @@
 import type { N8nExecution, N8nExecutionResponse, N8nWorkflowResponse } from "./types";
 import { getN8nBaseUrl, getPollInterval, getApiKey } from "./config";
 
+// Constants
+const EXECUTION_LOOKUP_BUFFER_MS = 10000; // 10 seconds buffer for timing issues
+const MAX_WORKFLOW_ID_ATTEMPTS = 5;
+const MAX_TIME_BASED_ATTEMPTS = 3;
+const MAX_RECURSION_DEPTH = 5;
+
+// Simple logger utility
+const logger = {
+  info: (message: string, ...args: unknown[]) => {
+    console.log(`[n8n-execution] ${message}`, ...args);
+  },
+  error: (message: string, error?: unknown) => {
+    console.error(`[n8n-execution] ${message}`, error);
+  },
+};
+
 /**
  * Get execution details from n8n API
  */
@@ -13,7 +29,8 @@ export async function getExecution(
   executionId: string,
 ): Promise<N8nExecution | null> {
   const baseUrl = getN8nBaseUrl();
-  const apiUrl = `${baseUrl}/api/v1/executions/${executionId}`;
+  // Include includeData=true to get the full execution data with results
+  const apiUrl = `${baseUrl}/api/v1/executions/${executionId}?includeData=true`;
 
   try {
     const options: RequestInit = {
@@ -35,14 +52,58 @@ export async function getExecution(
     const response = await fetch(apiUrl, options);
 
     if (!response.ok) {
+      logger.info(`getExecution failed: ${response.status} ${response.statusText}`);
       return null;
     }
 
     const data = (await response.json()) as N8nExecution;
     return data;
-  } catch {
+  } catch (error) {
+    logger.error("getExecution error:", error);
     return null;
   }
+}
+
+/**
+ * Sort executions by start time in descending order
+ */
+function sortExecutionsByTime(executions: N8nExecution[]): N8nExecution[] {
+  return executions.sort((a, b) => {
+    const aTime = new Date(a.startedAt).getTime();
+    const bTime = new Date(b.startedAt).getTime();
+    return bTime - aTime; // Descending order
+  });
+}
+
+/**
+ * Filter executions that started after a given time
+ */
+function filterExecutionsByTime(
+  executions: N8nExecution[],
+  startedAfter: Date,
+): N8nExecution[] {
+  return executions.filter((exec) => {
+    const startedAt = new Date(exec.startedAt);
+    return startedAt >= startedAfter;
+  });
+}
+
+/**
+ * Find the best matching execution (prefer unfinished, then most recent)
+ */
+function selectBestExecution(executions: N8nExecution[]): string | null {
+  if (executions.length === 0) return null;
+
+  // Prefer unfinished executions
+  const unfinished = executions.find((exec) => !exec.finished);
+  if (unfinished) {
+    logger.info(`Found unfinished execution: ${unfinished.id}`);
+    return unfinished.id;
+  }
+
+  // Fall back to most recent finished execution
+  logger.info(`All finished, returning most recent: ${executions[0].id}`);
+  return executions[0].id;
 }
 
 /**
@@ -54,6 +115,10 @@ export async function findLatestExecution(
   startedAfter: Date,
 ): Promise<string | null> {
   const baseUrl = getN8nBaseUrl();
+  logger.info(
+    `Finding latest execution for workflow: ${workflowId}, started after: ${startedAfter.toISOString()}`,
+  );
+
   // Try both with and without workflowId parameter - some n8n versions use different endpoints
   const apiUrls = [
     `${baseUrl}/api/v1/executions?workflowId=${workflowId}&limit=20`,
@@ -62,6 +127,7 @@ export async function findLatestExecution(
 
   for (const apiUrl of apiUrls) {
     try {
+      logger.info(`Trying API URL: ${apiUrl}`);
       const options: RequestInit = {
         method: "GET",
         headers: {
@@ -81,48 +147,69 @@ export async function findLatestExecution(
       const response = await fetch(apiUrl, options);
 
       if (!response.ok) {
+        logger.info(`API response not OK: ${response.status} ${response.statusText}`);
+        if (response.status === 401) {
+          logger.info(
+            `Authentication failed - API key may be missing or invalid (configured: ${!!getApiKey()})`,
+          );
+        }
         continue; // Try next URL
       }
 
       const data = (await response.json()) as N8nExecutionResponse;
+      logger.info(`Found ${data.data?.length || 0} executions`);
+
       if (!data.data || data.data.length === 0) {
         continue; // Try next URL
       }
 
       // Filter by workflow ID if not already filtered by API
       let executions = data.data;
-      if (!apiUrl.includes("workflowId=")) {
+      const isFiltered = apiUrl.includes("workflowId=");
+
+      if (!isFiltered) {
+        logger.info(
+          `Filtering ${executions.length} executions for workflow ID: ${workflowId}`,
+        );
         executions = executions.filter((exec) => exec.workflowId === workflowId);
+        logger.info(`Filtered to ${executions.length} executions`);
       }
 
       // Find the most recent execution that started after our webhook call
-      // Sort by startedAt descending to get the most recent first
-      const recentExecutions = executions
-        .filter((exec) => {
-          const startedAt = new Date(exec.startedAt);
-          return startedAt >= startedAfter;
-        })
-        .sort((a, b) => {
-          const aTime = new Date(a.startedAt).getTime();
-          const bTime = new Date(b.startedAt).getTime();
-          return bTime - aTime; // Descending order
-        });
+      const recentExecutions = sortExecutionsByTime(
+        filterExecutionsByTime(executions, startedAfter),
+      );
 
-      // Prefer unfinished executions, but fall back to finished ones if needed
-      const unfinished = recentExecutions.find((exec) => !exec.finished);
-      if (unfinished) {
-        return unfinished.id;
-      }
+      logger.info(`Recent executions (after time filter): ${recentExecutions.length}`);
 
-      // If all are finished, return the most recent one (might have just finished)
-      if (recentExecutions.length > 0) {
-        return recentExecutions[0].id;
+      const executionId = selectBestExecution(recentExecutions);
+      if (executionId) return executionId;
+
+      // If no matches with workflow ID filter, try without it as a fallback
+      // This handles cases where the webhook path UUID doesn't match the workflow ID
+      if (executions.length === 0 && !isFiltered) {
+        logger.info("No matches with workflow ID filter, trying all recent executions");
+        const allRecentExecutions = sortExecutionsByTime(
+          filterExecutionsByTime(data.data, startedAfter),
+        );
+
+        if (allRecentExecutions.length > 0) {
+          logger.info(
+            `Found ${allRecentExecutions.length} recent executions without workflow filter`,
+          );
+          logger.info(
+            `Using most recent execution: ${allRecentExecutions[0].id} from workflow: ${allRecentExecutions[0].workflowId}`,
+          );
+          return allRecentExecutions[0].id;
+        }
       }
-    } catch {
+    } catch (error) {
+      logger.error("Error fetching executions:", error);
       continue; // Try next URL
     }
   }
 
+  logger.info("No execution found");
   return null;
 }
 
@@ -164,30 +251,13 @@ export async function findLatestExecutionByTime(
     }
 
     // Find the most recent execution that started after our webhook call
-    const recentExecutions = data.data
-      .filter((exec) => {
-        const startedAt = new Date(exec.startedAt);
-        return startedAt >= startedAfter;
-      })
-      .sort((a, b) => {
-        const aTime = new Date(a.startedAt).getTime();
-        const bTime = new Date(b.startedAt).getTime();
-        return bTime - aTime; // Descending order
-      });
+    const recentExecutions = sortExecutionsByTime(
+      filterExecutionsByTime(data.data, startedAfter),
+    );
 
-    // Prefer unfinished executions
-    const unfinished = recentExecutions.find((exec) => !exec.finished);
-    if (unfinished) {
-      return unfinished.id;
-    }
-
-    // If all are finished, return the most recent one
-    if (recentExecutions.length > 0) {
-      return recentExecutions[0].id;
-    }
-
-    return null;
-  } catch {
+    return selectBestExecution(recentExecutions);
+  } catch (error) {
+    logger.error("Error in findLatestExecutionByTime:", error);
     return null;
   }
 }
@@ -196,28 +266,40 @@ export async function findLatestExecutionByTime(
  * Extract workflow result from completed execution
  */
 export function extractWorkflowResult(execution: N8nExecution): unknown {
+  logger.info(`Extracting result from execution: ${execution.id}`);
+  logger.info(`Execution data structure: ${JSON.stringify(execution, null, 2)}`);
+  
   // Try to extract result from the last node's output
   if (execution.data?.resultData?.runData) {
     const runData = execution.data.resultData.runData;
     const nodeIds = Object.keys(runData);
+    logger.info(`Found ${nodeIds.length} nodes in runData: ${nodeIds.join(', ')}`);
     
     if (nodeIds.length > 0) {
       // Get the last node's output
       const lastNodeId = nodeIds[nodeIds.length - 1];
       const lastNodeData = runData[lastNodeId];
+      logger.info(`Last node ID: ${lastNodeId}`);
+      logger.info(`Last node data: ${JSON.stringify(lastNodeData, null, 2)}`);
       
       if (Array.isArray(lastNodeData) && lastNodeData.length > 0) {
         const lastExecution = lastNodeData[lastNodeData.length - 1];
         if (lastExecution && typeof lastExecution === "object") {
           const execData = lastExecution as Record<string, unknown>;
+          logger.info(`Last execution data keys: ${Object.keys(execData).join(', ')}`);
           // Return the data from the last node
-          return execData.data || execData.output || execData;
+          const result = execData.data || execData.output || execData;
+          logger.info(`Extracted result: ${JSON.stringify(result, null, 2)}`);
+          return result;
         }
       }
     }
+  } else {
+    logger.info(`No runData found. Execution data keys: ${Object.keys(execution.data || {}).join(', ')}`);
   }
 
   // Fallback: return the execution data itself
+  logger.info(`Using fallback result: ${JSON.stringify(execution.data || { status: execution.status }, null, 2)}`);
   return execution.data || { status: execution.status };
 }
 
@@ -230,33 +312,50 @@ export async function pollExecutionStatus(
   startTime: number = Date.now(),
 ): Promise<N8nWorkflowResponse> {
   const pollInterval = getPollInterval();
+  logger.info(
+    `Starting to poll execution: ${executionId}, timeout: ${timeout}ms, pollInterval: ${pollInterval}ms`,
+  );
 
   while (Date.now() - startTime < timeout) {
     const execution = await getExecution(executionId);
+    const elapsed = Date.now() - startTime;
 
     if (!execution) {
-      // Execution not found, might have been deleted or doesn't exist yet
+      logger.info(`Execution not found yet, elapsed: ${elapsed}ms`);
       await new Promise((resolve) => setTimeout(resolve, pollInterval));
       continue;
     }
 
+    logger.info(
+      `Execution status: id=${execution.id}, finished=${execution.finished}, status=${execution.status}, elapsed=${elapsed}ms`,
+    );
+
     // Check if execution is finished
     if (execution.finished) {
+      logger.info(`Execution finished with status: ${execution.status}`);
+
       if (execution.status === "success") {
         const result = extractWorkflowResult(execution);
         return {
           success: true,
           data: result,
+          executionId: execution.id,
         };
-      } else if (execution.status === "error") {
+      }
+
+      if (execution.status === "error") {
         return {
           success: false,
           error: `Workflow execution failed: ${execution.status}`,
+          executionId: execution.id,
         };
-      } else if (execution.status === "canceled") {
+      }
+
+      if (execution.status === "canceled") {
         return {
           success: false,
           error: "Workflow execution was canceled",
+          executionId: execution.id,
         };
       }
     }
@@ -265,6 +364,7 @@ export async function pollExecutionStatus(
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
 
+  logger.info("Polling timeout reached");
   return {
     success: false,
     error: "Workflow execution timeout - workflow took too long to complete",
