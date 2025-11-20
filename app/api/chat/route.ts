@@ -151,14 +151,34 @@ export async function POST(req: Request) {
           type: "string",
           description: "The full webhook URL of the n8n workflow to call",
         },
+        webhook_url: {
+          type: "string",
+          description: "The full webhook URL of the n8n workflow to call (alternative naming)",
+        },
         payload: {
           type: "object",
           description: "The payload to send to the workflow",
         },
       },
-      required: ["webhookUrl"],
+      required: [],
     },
-    execute: async ({ webhookUrl, payload }) => {
+    execute: async (args) => {
+      // Support both camelCase and snake_case parameter names
+      const argsTyped = args as {
+        webhookUrl?: string;
+        webhook_url?: string;
+        payload?: Record<string, unknown>;
+      };
+      const webhookUrl = argsTyped.webhookUrl || argsTyped.webhook_url;
+      const payload = argsTyped.payload;
+
+      if (!webhookUrl) {
+        return {
+          success: false,
+          error: "Either webhookUrl or webhook_url must be provided",
+        };
+      }
+
       const result = await callN8nWorkflow({
         webhookUrl,
         method: "POST",
