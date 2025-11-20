@@ -30,6 +30,10 @@ N8N_BASE_URL=http://localhost:5678
 N8N_WEBHOOK_BASE_URL=http://localhost:5678/webhook
 # Optional: API key for n8n API authentication
 # N8N_API_KEY=your-n8n-api-key
+
+# Optional: Synchronous execution settings
+# N8N_WAIT_FOR_COMPLETION=true  # Wait for workflow completion (default: true)
+# N8N_POLL_INTERVAL=500         # Polling interval in ms (default: 500ms)
 ```
 
 ### Setting Up Workflows
@@ -43,6 +47,8 @@ N8N_WEBHOOK_BASE_URL=http://localhost:5678/webhook
    - If your webhook URL is `http://localhost:5678/webhook/answer-question`, use `/answer-question` as the `webhookPath`
 
 3. **Confirmation Requirements**: Workflows that modify external state (like sending messages) are configured to require confirmation. You can adjust this in `lib/n8n-config.ts` by setting `requiresConfirmation: true/false`.
+
+4. **Synchronous Execution**: By default, the system waits for workflows to complete before returning results. If your n8n webhook is configured for asynchronous execution ("Response Mode: Immediately"), the system will automatically poll the execution API until completion. You can disable this behavior by setting `N8N_WAIT_FOR_COMPLETION=false` in your `.env.local`.
 
 ### Available Tools
 
