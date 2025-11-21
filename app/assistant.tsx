@@ -23,6 +23,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { StreamMonitor } from "@/components/assistant-ui/stream-monitor";
+import { StreamingProvider } from "@/components/assistant-ui/streaming-context";
 
 export const Assistant = () => {
   const [activeTab, setActiveTab] = useState<"chat" | "monitor">("chat");
@@ -34,60 +35,62 @@ export const Assistant = () => {
   });
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <SidebarProvider>
-        <div className="flex h-dvh w-full pr-0.5">
-          <ThreadListSidebar />
-          <SidebarInset>
-            <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-              <SidebarTrigger />
-              <Separator orientation="vertical" className="mr-2 h-4" />
-              <Breadcrumb>
-                <BreadcrumbList>
-                  <BreadcrumbItem className="hidden md:block">
-                    <BreadcrumbLink
-                      href="https://paragonos.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Explore ParagonOS
-                    </BreadcrumbLink>
-                  </BreadcrumbItem>
-                  <BreadcrumbSeparator className="hidden md:block" />
-                  <BreadcrumbItem>
-                    <BreadcrumbPage>ParagonOS UI</BreadcrumbPage>
-                  </BreadcrumbItem>
-                </BreadcrumbList>
-              </Breadcrumb>
-              <div className="ml-auto flex gap-2">
-                <button
-                  onClick={() => setActiveTab("chat")}
-                  className={`px-3 py-1.5 text-sm rounded transition-colors ${
-                    activeTab === "chat"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                  }`}
-                >
-                  Chat
-                </button>
-                <button
-                  onClick={() => setActiveTab("monitor")}
-                  className={`px-3 py-1.5 text-sm rounded transition-colors ${
-                    activeTab === "monitor"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                  }`}
-                >
-                  Stream Monitor
-                </button>
+    <StreamingProvider>
+      <AssistantRuntimeProvider runtime={runtime}>
+        <SidebarProvider>
+          <div className="flex h-dvh w-full pr-0.5">
+            <ThreadListSidebar />
+            <SidebarInset>
+              <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+                <SidebarTrigger />
+                <Separator orientation="vertical" className="mr-2 h-4" />
+                <Breadcrumb>
+                  <BreadcrumbList>
+                    <BreadcrumbItem className="hidden md:block">
+                      <BreadcrumbLink
+                        href="https://paragonos.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Explore ParagonOS
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator className="hidden md:block" />
+                    <BreadcrumbItem>
+                      <BreadcrumbPage>ParagonOS UI</BreadcrumbPage>
+                    </BreadcrumbItem>
+                  </BreadcrumbList>
+                </Breadcrumb>
+                <div className="ml-auto flex gap-2">
+                  <button
+                    onClick={() => setActiveTab("chat")}
+                    className={`px-3 py-1.5 text-sm rounded transition-colors ${
+                      activeTab === "chat"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                    }`}
+                  >
+                    Chat
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("monitor")}
+                    className={`px-3 py-1.5 text-sm rounded transition-colors ${
+                      activeTab === "monitor"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                    }`}
+                  >
+                    Stream Monitor
+                  </button>
+                </div>
+              </header>
+              <div className="flex-1 overflow-hidden">
+                {activeTab === "chat" ? <Thread /> : <StreamMonitor />}
               </div>
-            </header>
-            <div className="flex-1 overflow-hidden">
-              {activeTab === "chat" ? <Thread /> : <StreamMonitor autoConnect />}
-            </div>
-          </SidebarInset>
-        </div>
-      </SidebarProvider>
-    </AssistantRuntimeProvider>
+            </SidebarInset>
+          </div>
+        </SidebarProvider>
+      </AssistantRuntimeProvider>
+    </StreamingProvider>
   );
 };

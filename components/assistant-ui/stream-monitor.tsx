@@ -1,23 +1,16 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import type { StreamUpdate } from "@/lib/n8n-client/types";
+import { useEffect, useRef } from "react";
+import { useStreaming } from "./streaming-context";
 
 interface StreamMonitorProps {
   executionIds?: string[]; // Optional: filter to specific executions
-  autoConnect?: boolean;
 }
 
 export function StreamMonitor({
   executionIds = [],
-  autoConnect = true,
 }: StreamMonitorProps) {
-  const [updates, setUpdates] = useState<StreamUpdate[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [connectionType, setConnectionType] = useState<"all" | "filtered">(
-    executionIds.length > 0 ? "filtered" : "all"
-  );
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const { updates, isConnected, connect, disconnect, clearUpdates } = useStreaming();
   const updatesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new updates arrive
@@ -25,138 +18,11 @@ export function StreamMonitor({
     updatesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [updates]);
 
-  // Connect to SSE endpoint
-  const connect = () => {
-    // Clean up any existing connection first
-    if (eventSourceRef.current) {
-      console.log("[stream-monitor] Closing existing connection before reconnecting");
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
-    const executionId =
-      connectionType === "filtered" && executionIds.length > 0
-        ? executionIds[0]
-        : "default";
-
-    const sseUrl = `/api/stream/sse/${executionId}`;
-    console.log(`[stream-monitor] Connecting to SSE: ${sseUrl}`);
-
-    try {
-      const eventSource = new EventSource(sseUrl);
-      eventSourceRef.current = eventSource;
-
-      eventSource.onopen = () => {
-        setIsConnected(true);
-        console.log("[stream-monitor] SSE connected");
-      };
-
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          // Skip connection messages
-          if (data.type === "connected") {
-            console.log("[stream-monitor] Connected to SSE stream");
-            return;
-          }
-
-          const update: StreamUpdate = data;
-          
-          // Filter by execution IDs if specified
-          if (
-            connectionType === "filtered" &&
-            executionIds.length > 0 &&
-            !executionIds.includes(update.executionId)
-          ) {
-            return;
-          }
-
-          console.log("[stream-monitor] Received update:", update);
-          setUpdates((prev) => [...prev, update]);
-        } catch (error) {
-          console.error("[stream-monitor] Failed to parse update:", error);
-        }
-      };
-
-      eventSource.onerror = (error) => {
-        // ReadyState: 0 = CONNECTING, 1 = OPEN, 2 = CLOSED
-        const state = eventSource.readyState;
-        
-        // In development, HMR/Fast Refresh will close connections - this is normal
-        if (state === 2) {
-          console.log("[stream-monitor] SSE connection closed (this is normal during development hot reload)");
-          setIsConnected(false);
-          eventSource.close();
-          eventSourceRef.current = null;
-        } else {
-          console.error("[stream-monitor] SSE error:", error);
-          console.error("[stream-monitor] EventSource readyState:", state);
-        }
-      };
-    } catch (error) {
-      console.error("[stream-monitor] Failed to create EventSource:", error);
-      setIsConnected(false);
-    }
-  };
-
-  // Disconnect from SSE
-  const disconnect = () => {
-    if (eventSourceRef.current) {
-      console.log("[stream-monitor] Manually disconnecting from SSE");
-      const es = eventSourceRef.current;
-      eventSourceRef.current = null; // Clear ref first to prevent reconnection attempts
-      es.close();
-      setIsConnected(false);
-    }
-  };
-
-  // Clear all updates
-  const clearUpdates = () => {
-    setUpdates([]);
-  };
-
-  // Auto-connect on mount if enabled
-  useEffect(() => {
-    let mounted = true;
-
-    if (autoConnect && mounted) {
-      // Small delay to prevent double-mounting issues in React strict mode
-      const timer = setTimeout(() => {
-        if (mounted) {
-          connect();
-        }
-      }, 100);
-
-      return () => {
-        mounted = false;
-        clearTimeout(timer);
-        disconnect();
-      };
-    }
-
-    return () => {
-      mounted = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoConnect]);
-
-  // Update connection type when executionIds change
-  useEffect(() => {
-    const newConnectionType = executionIds.length > 0 ? "filtered" : "all";
-    
-    // Only reconnect if connection type actually changed
-    if (newConnectionType !== connectionType) {
-      setConnectionType(newConnectionType);
-      
-      // Reconnect if already connected
-      if (eventSourceRef.current) {
-        disconnect();
-        setTimeout(() => connect(), 100);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [executionIds]);
+  // Filter updates by executionIds if specified
+  const filteredUpdates =
+    executionIds.length > 0
+      ? updates.filter((update) => executionIds.includes(update.executionId))
+      : updates;
 
   const getStatusColor = (status: string): string => {
     switch (status) {
@@ -259,14 +125,14 @@ export function StreamMonitor({
 
       {/* Updates List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        {updates.length === 0 ? (
+        {filteredUpdates.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">
             {isConnected
               ? "Waiting for workflow updates..."
-              : "Connect to see real-time workflow updates"}
+              : "Disconnected - click Connect to see updates"}
           </div>
         ) : (
-          updates.map((update, index) => (
+          filteredUpdates.map((update, index) => (
             <div
               key={`${update.executionId}-${update.timestamp}-${index}`}
               className="border rounded-lg p-3 bg-card"
@@ -316,8 +182,9 @@ export function StreamMonitor({
 
       {/* Footer */}
       <div className="border-t p-2 text-xs text-muted-foreground text-center">
-        {updates.length} update{updates.length !== 1 ? "s" : ""} received
-        {connectionType === "filtered" && executionIds.length > 0 && (
+        {filteredUpdates.length} update{filteredUpdates.length !== 1 ? "s" : ""}{" "}
+        {executionIds.length > 0 ? "shown" : "received"}
+        {executionIds.length > 0 && (
           <span> • Filtering {executionIds.length} execution(s)</span>
         )}
       </div>
