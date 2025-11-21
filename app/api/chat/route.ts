@@ -6,30 +6,6 @@ import {
   getWorkflowDescription,
 } from "@/lib/n8n-config";
 
-// Example of using streaming callbacks (currently not integrated with AI SDK streaming)
-// To see real-time updates, workflows must send updates to /api/stream/update
-// Updates will appear in the Stream Monitor tab
-//
-// const result = await callN8nWorkflow({
-//   webhookUrl,
-//   method: "POST",
-//   payload: { question },
-//   streaming: {
-//     onStart: (executionId, workflowId) => {
-//       console.log('[chat] Workflow started:', executionId);
-//     },
-//     onUpdate: (update) => {
-//       console.log('[chat] Progress:', update.stage, update.message);
-//     },
-//     onComplete: (result, executionId) => {
-//       console.log('[chat] Workflow completed:', executionId);
-//     },
-//     onError: (error) => {
-//       console.error('[chat] Workflow error:', error);
-//     },
-//   },
-// });
-
 export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json();
 
