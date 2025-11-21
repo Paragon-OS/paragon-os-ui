@@ -308,10 +308,7 @@ const AssistantMessage: FC = () => {
               Text: MarkdownText,
               tools: {
                 Fallback: ToolFallback,
-                answerQuestion: N8nToolCall,
-                sendMessage: N8nToolCall,
-                generateTriage: N8nToolCall,
-                callN8nWorkflow: N8nToolCall,
+                paragonOS: N8nToolCall,
               },
             }}
           />

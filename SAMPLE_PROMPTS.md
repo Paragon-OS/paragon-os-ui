@@ -89,7 +89,7 @@ Here are some sample prompts you can use to test the `sendMessage` tool, particu
 
 ## Notes
 
-- The tool will automatically use the correct webhook URL (`/webhook-test/paragonos-send-message` or `/webhook/paragonos-send-message`)
+- The tool will automatically use the correct webhook URL (`/webhook-test/paragon-os` or `/webhook/paragon-os`)
 - If you don't specify a message, it will use the entire conversation history
 - The payload is automatically formatted with the correct structure including `chatInput`, `stage`, `status`, `message`, and `streamUrl`
 

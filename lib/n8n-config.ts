@@ -15,41 +15,17 @@ export interface WorkflowConfig {
 }
 
 export type WorkflowName =
-  | "answerQuestion"
-  | "sendMessage"
-  | "generateTriage"
-  | "callN8nWorkflow";
+  | "paragonOS";
 
 /**
  * Workflow configurations
  * Add your n8n workflow webhook paths or URLs here
  */
 export const workflowConfigs: Record<WorkflowName, WorkflowConfig> = {
-  answerQuestion: {
-    // Update this with your actual webhook path for the Q&A workflow
-    webhookPath: "/answer-question",
+  paragonOS: {
+    webhookPath: "/paragon-os",
     requiresConfirmation: false,
-    description: "Answer a question using personal Telegram & Discord chat history",
-    method: "POST",
-  },
-  sendMessage: {
-    // Update this with your actual webhook path for sending messages
-    webhookPath: "/send-message",
-    requiresConfirmation: true,
-    description: "Send a message via Telegram or Discord using the paragonos-send-message webhook. Use this tool when the user wants to send a message, call a POST webhook with a message, or send a message to someone. This tool automatically calls the correct webhook URL (http://localhost:5678/webhook-test/paragonos-send-message or http://localhost:5678/webhook/paragonos-send-message) with the properly formatted payload. Accepts an optional 'message' parameter - if provided, sends that specific message; otherwise uses the conversation history.",
-    method: "POST",
-  },
-  generateTriage: {
-    // Update this with your actual webhook path for generating triages
-    webhookPath: "/generate-triage",
-    requiresConfirmation: false,
-    description: "Generate a triage from context",
-    method: "POST",
-  },
-  callN8nWorkflow: {
-    // Generic workflow caller - uses provided webhook URL directly
-    requiresConfirmation: false,
-    description: "Call any n8n workflow via webhook URL",
+    description: "Interact with ParagonOS to handle messaging, questions, and tasks via Discord and Telegram.",
     method: "POST",
   },
 };
@@ -98,12 +74,12 @@ export function getWorkflowDescription(workflowName: WorkflowName): string {
 }
 
 /**
- * Get paragonos-send-message webhook URL
+ * Get paragon-os webhook URL
  * Supports both test and production endpoints
  * Tries test endpoint first, falls back to production
  */
 export function getParagonosSendMessageWebhookUrl(useTest: boolean = true): string {
   const baseUrl = process.env.N8N_BASE_URL || "http://localhost:5678";
-  const endpoint = useTest ? "/webhook-test/paragonos-send-message" : "/webhook/paragonos-send-message";
+  const endpoint = useTest ? "/webhook-test/paragon-os" : "/webhook/paragon-os";
   return `${baseUrl}${endpoint}`;
 }
