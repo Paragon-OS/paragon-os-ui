@@ -304,6 +304,109 @@ export function extractWorkflowResult(execution: N8nExecution): unknown {
 }
 
 /**
+ * Get all executions from n8n API with optional filters
+ */
+export async function getAllExecutions(
+  limit: number = 100,
+  workflowId?: string,
+): Promise<N8nExecution[]> {
+  const baseUrl = getN8nBaseUrl();
+  let apiUrl = `${baseUrl}/api/v1/executions?limit=${limit}`;
+  
+  if (workflowId) {
+    apiUrl += `&workflowId=${workflowId}`;
+  }
+
+  try {
+    const options: RequestInit = {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    };
+
+    // Add authentication if available
+    const apiKey = getApiKey();
+    if (apiKey) {
+      options.headers = {
+        ...options.headers,
+        "X-N8N-API-KEY": apiKey,
+      };
+    }
+
+    logger.info(`Fetching all executions from: ${apiUrl}`);
+    const response = await fetch(apiUrl, options);
+
+    if (!response.ok) {
+      logger.error(`Failed to fetch executions: ${response.status} ${response.statusText}`);
+      return [];
+    }
+
+    const data = (await response.json()) as N8nExecutionResponse;
+    const executions = data.data || [];
+    logger.info(`Found ${executions.length} executions`);
+    return executions;
+  } catch (error) {
+    logger.error("Error fetching all executions:", error);
+    return [];
+  }
+}
+
+/**
+ * Get detailed execution information including full data
+ */
+export async function getExecutionDetails(executionId: string): Promise<N8nExecution | null> {
+  return await getExecution(executionId);
+}
+
+/**
+ * List all executions with their events and data
+ */
+export async function listAllExecutionsWithDetails(
+  limit: number = 100,
+  workflowId?: string,
+): Promise<Array<{
+  id: string;
+  workflowId: string;
+  status: string;
+  finished: boolean;
+  startedAt: string;
+  stoppedAt?: string;
+  mode: string;
+  retryOf?: string;
+  data?: {
+    resultData?: {
+      runData?: Record<string, unknown[]>;
+    };
+    error?: unknown;
+  };
+  fullData?: unknown;
+}>> {
+  const executions = await getAllExecutions(limit, workflowId);
+  
+  // Fetch detailed data for each execution
+  const detailedExecutions = await Promise.all(
+    executions.map(async (exec) => {
+      const details = await getExecutionDetails(exec.id);
+      return {
+        id: exec.id,
+        workflowId: exec.workflowId,
+        status: exec.status,
+        finished: exec.finished,
+        startedAt: exec.startedAt,
+        stoppedAt: exec.stoppedAt,
+        mode: exec.mode,
+        retryOf: exec.retryOf,
+        data: exec.data,
+        fullData: details?.data,
+      };
+    })
+  );
+
+  return detailedExecutions;
+}
+
+/**
  * Poll execution status until completion
  */
 export async function pollExecutionStatus(
@@ -331,8 +434,14 @@ export async function pollExecutionStatus(
     );
 
     // Check if execution is finished
-    if (execution.finished) {
-      logger.info(`Execution finished with status: ${execution.status}`);
+    // Note: Some n8n executions may have status=error but finished=false
+    // If stoppedAt is set, consider it finished
+    const isActuallyFinished = execution.finished || 
+      (execution.status === "error" && execution.stoppedAt) ||
+      (execution.status === "canceled" && execution.stoppedAt);
+
+    if (isActuallyFinished) {
+      logger.info(`Execution finished with status: ${execution.status} (finished=${execution.finished}, stoppedAt=${execution.stoppedAt})`);
 
       if (execution.status === "success") {
         const result = extractWorkflowResult(execution);
@@ -344,9 +453,15 @@ export async function pollExecutionStatus(
       }
 
       if (execution.status === "error") {
+        // Try to extract error message from execution data
+        const errorMessage = execution.data?.error?.message || 
+                           execution.data?.error?.error?.message ||
+                           `Workflow execution failed: ${execution.status}`;
+        
+        logger.error(`Execution error: ${errorMessage}`);
         return {
           success: false,
-          error: `Workflow execution failed: ${execution.status}`,
+          error: errorMessage,
           executionId: execution.id,
         };
       }
