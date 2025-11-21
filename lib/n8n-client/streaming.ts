@@ -90,7 +90,7 @@ export class StreamingClient {
   private async connectWebSocket(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        const wsUrl = this.serverUrl.replace(/^http/, "ws") + "/stream/ws";
+        const wsUrl = this.serverUrl.replace(/^http/, "ws") + "/ws";
         logger.info(`🔌 Connecting to WebSocket: ${wsUrl}`);
         
         this.ws = new WebSocket(wsUrl);
@@ -135,7 +135,7 @@ export class StreamingClient {
   private async connectSSE(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        const sseUrl = `${this.serverUrl}/stream/sse/default`;
+        const sseUrl = `${this.serverUrl}/sse/default`;
         logger.info(`🔌 Connecting to SSE: ${sseUrl}`);
         
         this.eventSource = new EventSource(sseUrl);

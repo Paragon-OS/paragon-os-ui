@@ -6,8 +6,7 @@
 export const DEFAULT_TIMEOUT = 60000; // 60 seconds (increased for long-running workflows)
 export const DEFAULT_POLL_INTERVAL = 500; // 500ms between polls
 const DEFAULT_N8N_BASE_URL = "http://localhost:5678";
-const DEFAULT_STREAMING_SERVER_URL = "http://localhost:3001";
-const DEFAULT_STREAMING_CONNECTION_TYPE = "websocket";
+const DEFAULT_STREAMING_CONNECTION_TYPE = "sse";
 
 /**
  * Get the n8n base URL from environment variables
@@ -48,16 +47,29 @@ export function getApiKey(): string | undefined {
 
 /**
  * Get streaming server URL from environment variables
+ * Defaults to Next.js API routes (/api/stream)
  */
 export function getStreamingServerUrl(): string {
-  return process.env.N8N_STREAMING_SERVER_URL || DEFAULT_STREAMING_SERVER_URL;
+  // If environment variable is set, use it
+  if (process.env.N8N_STREAMING_SERVER_URL) {
+    return process.env.N8N_STREAMING_SERVER_URL;
+  }
+  
+  // In browser, use relative URL to current origin
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/stream`;
+  }
+  
+  // On server, default to localhost (for SSR)
+  return "http://localhost:3000/api/stream";
 }
 
 /**
  * Get streaming connection type preference from environment variables
+ * Defaults to SSE (Server-Sent Events) which works with Next.js API routes
  */
 export function getStreamingConnectionType(): "websocket" | "sse" {
   const type = process.env.N8N_STREAMING_CONNECTION_TYPE;
-  return type === "sse" ? "sse" : DEFAULT_STREAMING_CONNECTION_TYPE;
+  return type === "websocket" ? "websocket" : DEFAULT_STREAMING_CONNECTION_TYPE;
 }
 

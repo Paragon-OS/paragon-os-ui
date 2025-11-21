@@ -35,9 +35,9 @@ N8N_WEBHOOK_BASE_URL=http://localhost:5678/webhook
 # N8N_WAIT_FOR_COMPLETION=true  # Wait for workflow completion (default: true)
 # N8N_POLL_INTERVAL=500         # Polling interval in ms (default: 500ms)
 
-# Optional: Streaming server configuration (for real-time workflow updates)
-# N8N_STREAMING_SERVER_URL=http://localhost:3001
-# N8N_STREAMING_CONNECTION_TYPE=websocket  # 'websocket' or 'sse' (default: websocket)
+# Optional: Streaming configuration (uses Next.js API routes by default)
+# N8N_STREAMING_SERVER_URL=http://localhost:3000/api/stream
+# N8N_STREAMING_CONNECTION_TYPE=sse  # 'sse' or 'websocket' (default: sse)
 ```
 
 ### Setting Up Workflows
@@ -72,32 +72,27 @@ Once configured, you can ask the AI assistant to:
 
 The assistant will automatically call the appropriate n8n workflows and display the results in the chat interface.
 
-### Real-Time Streaming Updates (NEW)
+### Real-Time Streaming Updates
 
-The n8n client now supports real-time streaming updates, allowing you to get immediate execution IDs and receive progress updates as workflows execute.
+The application includes built-in real-time streaming for workflow execution monitoring via Server-Sent Events (SSE).
 
 #### Features
 
-- **Immediate Response**: Get workflow ID and execution ID as soon as the workflow starts
-- **Real-Time Updates**: Receive progress updates while the workflow is running
-- **Callback-Based**: Use callbacks to handle start, update, complete, and error events
-- **Multiple Executions**: Track multiple concurrent workflow executions simultaneously
+- **Built-in Streaming Server**: No external services needed - streaming is integrated into Next.js API routes
+- **Stream Monitor Tab**: View real-time workflow updates in the UI
+- **Immediate Response**: Get workflow ID and execution ID as soon as workflows start
+- **Real-Time Progress**: See workflow progress updates as they happen
+- **Multiple Executions**: Track multiple concurrent workflows simultaneously
 
-#### Setup
+#### Usage
 
-1. **Start the Streaming Server**: Run the streaming server (requires Node.js):
-   ```bash
-   cd streaming-server
-   npm install
-   node server.js
-   ```
-   The server will start on `http://localhost:3001`
+1. **View Stream Monitor**: Click the "Stream Monitor" tab in the UI to see real-time workflow updates
 
 2. **Configure n8n Workflows**: Add HTTP Request nodes in your n8n workflows to send updates:
    ```json
    {
      "method": "POST",
-     "url": "http://localhost:3001/stream/update",
+     "url": "http://localhost:3000/api/stream/update",
      "body": {
        "executionId": "{{ $execution.id }}",
        "stage": "processing",
@@ -109,7 +104,7 @@ The n8n client now supports real-time streaming updates, allowing you to get imm
    }
    ```
 
-3. **Use Streaming in Your Code**:
+3. **Use Streaming in Code** (optional):
    ```typescript
    import { callN8nWorkflow } from '@/lib/n8n-client';
 
@@ -132,16 +127,15 @@ The n8n client now supports real-time streaming updates, allowing you to get imm
        },
      },
    });
-
-   // Result returned immediately with execution IDs
-   console.log('Execution ID:', result.executionId);
    ```
 
-#### Documentation
+#### API Endpoints
 
-- **Usage Guide**: See `lib/n8n-client/STREAMING_USAGE.md` for comprehensive examples
-- **Integration Examples**: See `lib/n8n-client/EXAMPLE_STREAMING_INTEGRATION.ts` for code samples
-- **Demo Server**: The streaming server includes a demo UI at `http://localhost:3001`
+- `GET /api/stream/sse/[executionId]` - Subscribe to real-time updates
+- `POST /api/stream/update` - Receive updates from n8n workflows
+- `GET /api/stream/health` - Check streaming server status
+
+See `app/api/stream/README.md` for complete API documentation.
 
 ## Development
 

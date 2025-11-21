@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import {
   useChatRuntime,
@@ -21,8 +22,11 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { StreamMonitor } from "@/components/assistant-ui/stream-monitor";
 
 export const Assistant = () => {
+  const [activeTab, setActiveTab] = useState<"chat" | "monitor">("chat");
+  
   const runtime = useChatRuntime({
     transport: new AssistantChatTransport({
       api: "/api/chat",
@@ -55,9 +59,31 @@ export const Assistant = () => {
                   </BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>
+              <div className="ml-auto flex gap-2">
+                <button
+                  onClick={() => setActiveTab("chat")}
+                  className={`px-3 py-1.5 text-sm rounded transition-colors ${
+                    activeTab === "chat"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                  }`}
+                >
+                  Chat
+                </button>
+                <button
+                  onClick={() => setActiveTab("monitor")}
+                  className={`px-3 py-1.5 text-sm rounded transition-colors ${
+                    activeTab === "monitor"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                  }`}
+                >
+                  Stream Monitor
+                </button>
+              </div>
             </header>
             <div className="flex-1 overflow-hidden">
-              <Thread />
+              {activeTab === "chat" ? <Thread /> : <StreamMonitor autoConnect />}
             </div>
           </SidebarInset>
         </div>
