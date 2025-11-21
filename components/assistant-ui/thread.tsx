@@ -115,30 +115,87 @@ const ThreadWelcome: FC = () => {
 };
 
 const ThreadSuggestions: FC = () => {
+  const samplePrompts = [
+    {
+      title: "Call webhook",
+      label: "with message about Cody",
+      action: 'call the POST webhook with a message "who is cody on telegram"',
+    },
+    {
+      title: "Send a message",
+      label: "asking about Cody",
+      action: 'Send a message asking "who is cody on telegram"',
+    },
+    {
+      title: "Send via Telegram",
+      label: "who is cody on telegram",
+      action: 'Send "who is cody on telegram" via Telegram',
+    },
+    {
+      title: "Send a message",
+      label: "who is cody on telegram",
+      action: 'Send a message: "who is cody on telegram"',
+    },
+    {
+      title: "Call webhook",
+      label: "find Cody's telegram username",
+      action: 'Call the webhook with message "find cody\'s telegram username"',
+    },
+    {
+      title: "Look up Cody",
+      label: "in telegram contacts",
+      action: 'Send "look up cody in my telegram contacts"',
+    },
+    {
+      title: "Get Cody's info",
+      label: "telegram handle",
+      action: 'Message: "what is cody\'s telegram handle"',
+    },
+    {
+      title: "Send message to Cody",
+      label: "hello, how are you?",
+      action: 'Send a message to Cody saying "hello, how are you?"',
+    },
+    {
+      title: "Ask about Cody",
+      label: "telegram username",
+      action: 'Send "who is cody and what\'s their telegram username"',
+    },
+    {
+      title: "Find Cody",
+      label: "on telegram",
+      action: 'Call the POST webhook with message "find cody on telegram"',
+    },
+    {
+      title: "Send message",
+      label: "who is cody on telegram",
+      action: "Send who is cody on telegram",
+    },
+    {
+      title: "Find Cody",
+      label: "send message asking",
+      action: 'I need to find Cody. Send a message asking "who is cody on telegram"',
+    },
+    {
+      title: "Natural language",
+      label: "find out who Cody is",
+      action: "Can you send a message to find out who Cody is on Telegram?",
+    },
+    {
+      title: "Multiple questions",
+      label: "telegram and discord",
+      action: 'Send "who is cody on telegram and discord"',
+    },
+    {
+      title: "With punctuation",
+      label: "Who is Cody on Telegram?",
+      action: 'Send message: "Who is Cody on Telegram?"',
+    },
+  ];
+
   return (
     <div className="aui-thread-welcome-suggestions grid w-full gap-2 pb-4 @md:grid-cols-2">
-      {[
-        {
-          title: "What's the weather",
-          label: "in San Francisco?",
-          action: "What's the weather in San Francisco?",
-        },
-        {
-          title: "Explain React hooks",
-          label: "like useState and useEffect",
-          action: "Explain React hooks like useState and useEffect",
-        },
-        {
-          title: "Write a SQL query",
-          label: "to find top customers",
-          action: "Write a SQL query to find top customers",
-        },
-        {
-          title: "Create a meal plan",
-          label: "for healthy weight loss",
-          action: "Create a meal plan for healthy weight loss",
-        },
-      ].map((suggestedAction, index) => (
+      {samplePrompts.map((suggestedAction, index) => (
         <m.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
