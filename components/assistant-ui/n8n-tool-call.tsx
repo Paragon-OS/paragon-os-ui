@@ -9,7 +9,7 @@ import {
   XIcon,
   WorkflowIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { N8nConfirmationDialog } from "./n8n-confirmation-dialog";
 import {
@@ -18,6 +18,8 @@ import {
   type WorkflowName,
 } from "@/lib/n8n-config";
 import { cn } from "@/lib/utils";
+import { useStreaming } from "./streaming-context";
+import { extractExecutionId } from "@/lib/n8n-client/webhook-utils";
 
 export const N8nToolCall: ToolCallMessagePartComponent = ({
   toolName,
@@ -27,6 +29,8 @@ export const N8nToolCall: ToolCallMessagePartComponent = ({
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [isUpdatesExpanded, setIsUpdatesExpanded] = useState(false);
+  const { updates } = useStreaming();
 
   // Parse arguments
   let args: Record<string, unknown> = {};
@@ -57,6 +61,25 @@ export const N8nToolCall: ToolCallMessagePartComponent = ({
       resultError = resultData?.error || null;
     }
   }
+
+  // Extract executionId from resultData
+  const executionId = useMemo(() => {
+    if (!resultData) return null;
+    return extractExecutionId(resultData);
+  }, [resultData]);
+
+  // Filter updates by executionId
+  const filteredUpdates = useMemo(() => {
+    if (!executionId) return [];
+    return updates.filter((update) => update.executionId === executionId);
+  }, [updates, executionId]);
+
+  // Auto-expand updates section when new updates arrive
+  useEffect(() => {
+    if (filteredUpdates.length > 0 && !isUpdatesExpanded) {
+      setIsUpdatesExpanded(true);
+    }
+  }, [filteredUpdates.length, isUpdatesExpanded]);
 
   // Check if this workflow requires confirmation
   const needsConfirmation =
@@ -105,6 +128,33 @@ export const N8nToolCall: ToolCallMessagePartComponent = ({
 
   const statusInfo = getStatusInfo();
   const StatusIcon = statusInfo.icon;
+
+  // Helper functions for displaying updates
+  const getStatusColor = (status: string): string => {
+    switch (status) {
+      case "completed":
+        return "bg-green-500";
+      case "error":
+        return "bg-red-500";
+      case "in_progress":
+        return "bg-orange-500";
+      default:
+        return "bg-blue-500";
+    }
+  };
+
+  const getStatusTextColor = (status: string): string => {
+    switch (status) {
+      case "completed":
+        return "text-green-400";
+      case "error":
+        return "text-red-400";
+      case "in_progress":
+        return "text-orange-400";
+      default:
+        return "text-blue-400";
+    }
+  };
 
   return (
     <>
@@ -172,6 +222,78 @@ export const N8nToolCall: ToolCallMessagePartComponent = ({
                       ? resultData
                       : JSON.stringify(resultData, null, 2)}
                 </pre>
+              </div>
+            )}
+
+            {/* Stream Updates Section */}
+            {executionId && filteredUpdates.length > 0 && (
+              <div className="aui-n8n-tool-call-updates-root border-t border-dashed px-4 pt-2">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="aui-n8n-tool-call-updates-header text-xs font-semibold">
+                    Stream Updates{" "}
+                    <span className="text-muted-foreground font-normal">
+                      ({filteredUpdates.length})
+                    </span>
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsUpdatesExpanded(!isUpdatesExpanded)}
+                    className="size-6 h-6"
+                  >
+                    {isUpdatesExpanded ? (
+                      <ChevronUpIcon className="size-3" />
+                    ) : (
+                      <ChevronDownIcon className="size-3" />
+                    )}
+                  </Button>
+                </div>
+                {isUpdatesExpanded && (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {filteredUpdates.map((update, index) => (
+                      <div
+                        key={`${update.executionId}-${update.timestamp}-${index}`}
+                        className="border rounded p-2 bg-background/50 text-xs"
+                      >
+                        <div className="flex items-start justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              {update.executionId.slice(0, 8)}...
+                            </span>
+                            <span
+                              className={cn(
+                                "text-[10px] font-semibold uppercase",
+                                getStatusTextColor(update.status),
+                              )}
+                            >
+                              {update.stage}
+                            </span>
+                          </div>
+                          <span
+                            className={cn(
+                              "px-1.5 py-0.5 text-[10px] font-medium rounded text-white",
+                              getStatusColor(update.status),
+                            )}
+                          >
+                            {update.status}
+                          </span>
+                        </div>
+                        <div className="text-xs mb-1">{update.message}</div>
+                        <div className="text-[10px] text-muted-foreground mb-1">
+                          {new Date(update.timestamp).toLocaleString()}
+                        </div>
+                        {update.data &&
+                          Object.keys(update.data).length > 0 && (
+                            <div className="mt-1 p-1.5 bg-muted/50 rounded text-[10px] font-mono overflow-x-auto">
+                              <pre className="whitespace-pre-wrap">
+                                {JSON.stringify(update.data, null, 2)}
+                              </pre>
+                            </div>
+                          )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

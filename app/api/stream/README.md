@@ -48,10 +48,15 @@ eventSource.onmessage = (event) => {
 
 Receive updates from n8n workflows and broadcast to SSE clients.
 
+**executionId (required)** can be provided in one of three ways:
+1. **Request body** (preferred): `{ "executionId": "..." }`
+2. **Query parameter**: `?executionId=...`
+3. **Header**: `X-Execution-Id: ...` or `Execution-Id: ...` or `X-N8N-Execution-Id: ...`
+
 **Request Body:**
 ```json
 {
-  "executionId": "string (required)",
+  "executionId": "string (required - see above for alternatives)",
   "stage": "string",
   "status": "in_progress | completed | error | info",
   "message": "string",
@@ -69,7 +74,7 @@ Receive updates from n8n workflows and broadcast to SSE clients.
 }
 ```
 
-**Example (from n8n HTTP Request node):**
+**Example 1: executionId in body (preferred):**
 ```json
 {
   "method": "POST",
@@ -83,6 +88,53 @@ Receive updates from n8n workflows and broadcast to SSE clients.
     "data": {
       "progress": 50
     }
+  }
+}
+```
+
+**Example 2: executionId from webhook body:**
+```json
+{
+  "method": "POST",
+  "url": "http://localhost:3000/api/stream/update",
+  "body": {
+    "executionId": "{{ $json.executionId }}",
+    "stage": "{{ $json.stage }}",
+    "status": "{{ $json.status }}",
+    "message": "{{ $json.message }}",
+    "timestamp": "{{ $now }}",
+    "data": {{ $json.data }}
+  }
+}
+```
+
+**Example 3: executionId as query parameter:**
+```json
+{
+  "method": "POST",
+  "url": "http://localhost:3000/api/stream/update?executionId={{ $execution.id }}",
+  "body": {
+    "stage": "processing",
+    "status": "in_progress",
+    "message": "Processing data...",
+    "timestamp": "{{ $now }}"
+  }
+}
+```
+
+**Example 4: executionId as header:**
+```json
+{
+  "method": "POST",
+  "url": "http://localhost:3000/api/stream/update",
+  "headers": {
+    "X-Execution-Id": "{{ $execution.id }}"
+  },
+  "body": {
+    "stage": "processing",
+    "status": "in_progress",
+    "message": "Processing data...",
+    "timestamp": "{{ $now }}"
   }
 }
 ```

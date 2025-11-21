@@ -161,7 +161,7 @@ export function StreamMonitor({
               </div>
 
               {/* Message */}
-              <div className="text-sm mb-2">{update.message}</div>
+              <div className="text-sm mb-2 break-words whitespace-pre-wrap">{update.message}</div>
 
               {/* Timestamp */}
               <div className="text-xs text-muted-foreground mb-2">
@@ -171,7 +171,7 @@ export function StreamMonitor({
               {/* Data */}
               {update.data && Object.keys(update.data).length > 0 && (
                 <div className="mt-2 p-2 bg-muted rounded text-xs font-mono overflow-x-auto">
-                  <pre>{JSON.stringify(update.data, null, 2)}</pre>
+                  <pre className="whitespace-pre-wrap break-words">{JSON.stringify(update.data, null, 2)}</pre>
                 </div>
               )}
             </div>
