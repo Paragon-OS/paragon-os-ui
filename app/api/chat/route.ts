@@ -19,77 +19,55 @@ function extractChatInput(messages: UIMessage[]): string {
   // Log messages for debugging
   console.log("[extractChatInput] Processing", messages.length, "messages");
   
-  // Convert messages to a readable conversation format
-  const conversationParts = messages
-    .map((msg) => {
-      const role = msg.role === "user" ? "User" : msg.role === "assistant" ? "Assistant" : "System";
-      
-      let content = "";
-      
-      if (typeof msg.content === "string") {
-        content = msg.content;
-      } else if (Array.isArray(msg.content)) {
-        content = msg.content
-          .map((part) => {
-            if (typeof part === "string") return part;
-            if (part && typeof part === "object") {
-              // Handle text parts
-              if (part.type === "text" && part.text) return part.text;
-              // Handle other part types
-              if (part.text) return part.text;
-            }
-            return "";
-          })
-          .filter(Boolean)
-          .join("");
-      }
-      
-      // Only include non-empty messages
-      if (!content || content.trim() === "") {
-        return null;
-      }
-      
-      return `${role}: ${content}`;
-    })
-    .filter((part): part is string => part !== null);
+  // Try to find the last user message specifically
+  const userMessages = messages.filter(m => m.role === "user");
+  const lastUserMessage = userMessages[userMessages.length - 1];
 
-  const result = conversationParts.join("\n\n");
-  
-  if (!result || result.trim() === "") {
-    console.error("[extractChatInput] No content extracted from messages!");
-    // Fallback: try to get the last user message directly with more thorough extraction
-    const userMessages = messages.filter(m => m.role === "user");
-    const lastUserMessage = userMessages[userMessages.length - 1];
-    
-    if (lastUserMessage) {
-      let fallbackContent = "";
-      
-      if (typeof lastUserMessage.content === "string") {
-        fallbackContent = lastUserMessage.content;
-      } else if (Array.isArray(lastUserMessage.content)) {
-        fallbackContent = lastUserMessage.content
-          .map((part: unknown) => {
-            if (typeof part === "string") return part;
-            if (part && typeof part === "object") {
-              const partObj = part as Record<string, unknown>;
-              if (partObj.text) return String(partObj.text);
-              if (partObj.type === "text" && partObj.text) return String(partObj.text);
-            }
-            return "";
-          })
-          .filter(Boolean)
-          .join("");
-      }
-      
-      if (fallbackContent && fallbackContent.trim() !== "") {
-        return fallbackContent;
-      }
-    }
-    
+  if (!lastUserMessage) {
+    console.warn("[extractChatInput] No user message found");
     return "";
   }
 
-  return result;
+  console.log("[extractChatInput] Last user message:", JSON.stringify(lastUserMessage, null, 2));
+
+  // Extract content from the last user message
+  // Handle both 'content' and 'parts' fields (different message formats)
+  const messageData = (lastUserMessage as any).parts || (lastUserMessage as any).content;
+  
+  let content = "";
+  if (typeof messageData === "string") {
+    content = messageData;
+  } else if (Array.isArray(messageData)) {
+    content = messageData
+      .map((part: any) => {
+        if (typeof part === "string") return part;
+        // Handle various object structures for text parts
+        if (part && typeof part === "object") {
+          if (part.type === "text" && part.text) return part.text;
+          if (part.text) return part.text;
+          // Fallback for other structures
+          return JSON.stringify(part);
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("");
+  } else if (messageData && typeof messageData === "object") {
+    // Handle case where content/parts is a single object (not array)
+    const contentObj = messageData as any;
+    if (contentObj.text) content = contentObj.text;
+    else content = JSON.stringify(contentObj);
+  }
+
+  if (content && content.trim() !== "") {
+    console.log("[extractChatInput] Successfully extracted:", content.substring(0, 100));
+    return content;
+  }
+
+  console.error("[extractChatInput] Failed to extract text from last user message, using raw content");
+  return typeof messageData === "string" 
+    ? messageData 
+    : JSON.stringify(messageData);
 }
 
 export async function POST(req: Request) {
@@ -120,7 +98,9 @@ export async function POST(req: Request) {
           description: "The natural language request, question, or instruction from the user to be handled by ParagonOS. Examples: 'Check for unreplied messages', 'DM sebastian about the meeting', 'What is the status of the deployment?'.",
         },
       },
-      required: ["prompt"],
+      // Note: prompt is technically required, but we allow the model to skip it
+      // if it can't extract it, and we'll fallback to the user's last message.
+      required: [],
     },
     execute: async ({ prompt }: { prompt: string }) => {
       // The prompt parameter is required, but we'll still have a fallback
