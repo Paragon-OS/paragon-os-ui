@@ -110,6 +110,19 @@ export function StreamingProvider({ children }: StreamingProviderProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Prevent Cmd+S / Ctrl+S from triggering browser save (which closes connection)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 's') {
+        event.preventDefault();
+        console.log("[streaming-context] Prevented Cmd+S from closing connection");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const value: StreamingContextType = {
     updates,
     isConnected,
