@@ -36,7 +36,7 @@ export const workflowConfigs: Record<WorkflowName, WorkflowConfig> = {
     // Update this with your actual webhook path for sending messages
     webhookPath: "/send-message",
     requiresConfirmation: true,
-    description: "Send a message via Telegram or Discord",
+    description: "Send a message via Telegram or Discord using the paragonos-send-message webhook. Use this tool when the user wants to send a message, call a POST webhook with a message, or send a message to someone. This tool automatically calls the correct webhook URL (http://localhost:5678/webhook-test/paragonos-send-message or http://localhost:5678/webhook/paragonos-send-message) with the properly formatted payload. Accepts an optional 'message' parameter - if provided, sends that specific message; otherwise uses the conversation history.",
     method: "POST",
   },
   generateTriage: {
@@ -95,4 +95,15 @@ export function requiresConfirmation(workflowName: WorkflowName): boolean {
 export function getWorkflowDescription(workflowName: WorkflowName): string {
   const config = getWorkflowConfig(workflowName);
   return config?.description ?? "Unknown workflow";
+}
+
+/**
+ * Get paragonos-send-message webhook URL
+ * Supports both test and production endpoints
+ * Tries test endpoint first, falls back to production
+ */
+export function getParagonosSendMessageWebhookUrl(useTest: boolean = true): string {
+  const baseUrl = process.env.N8N_BASE_URL || "http://localhost:5678";
+  const endpoint = useTest ? "/webhook-test/paragonos-send-message" : "/webhook/paragonos-send-message";
+  return `${baseUrl}${endpoint}`;
 }
