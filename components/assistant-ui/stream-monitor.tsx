@@ -27,8 +27,11 @@ export function StreamMonitor({
 
   // Connect to SSE endpoint
   const connect = () => {
+    // Clean up any existing connection first
     if (eventSourceRef.current) {
-      return; // Already connected
+      console.log("[stream-monitor] Closing existing connection before reconnecting");
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
     }
 
     const executionId =
@@ -39,56 +42,71 @@ export function StreamMonitor({
     const sseUrl = `/api/stream/sse/${executionId}`;
     console.log(`[stream-monitor] Connecting to SSE: ${sseUrl}`);
 
-    const eventSource = new EventSource(sseUrl);
-    eventSourceRef.current = eventSource;
+    try {
+      const eventSource = new EventSource(sseUrl);
+      eventSourceRef.current = eventSource;
 
-    eventSource.onopen = () => {
-      setIsConnected(true);
-      console.log("[stream-monitor] SSE connected");
-    };
+      eventSource.onopen = () => {
+        setIsConnected(true);
+        console.log("[stream-monitor] SSE connected");
+      };
 
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        // Skip connection messages
-        if (data.type === "connected") {
-          console.log("[stream-monitor] Connected to SSE stream");
-          return;
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          // Skip connection messages
+          if (data.type === "connected") {
+            console.log("[stream-monitor] Connected to SSE stream");
+            return;
+          }
+
+          const update: StreamUpdate = data;
+          
+          // Filter by execution IDs if specified
+          if (
+            connectionType === "filtered" &&
+            executionIds.length > 0 &&
+            !executionIds.includes(update.executionId)
+          ) {
+            return;
+          }
+
+          console.log("[stream-monitor] Received update:", update);
+          setUpdates((prev) => [...prev, update]);
+        } catch (error) {
+          console.error("[stream-monitor] Failed to parse update:", error);
         }
+      };
 
-        const update: StreamUpdate = data;
+      eventSource.onerror = (error) => {
+        // ReadyState: 0 = CONNECTING, 1 = OPEN, 2 = CLOSED
+        const state = eventSource.readyState;
         
-        // Filter by execution IDs if specified
-        if (
-          connectionType === "filtered" &&
-          executionIds.length > 0 &&
-          !executionIds.includes(update.executionId)
-        ) {
-          return;
+        // In development, HMR/Fast Refresh will close connections - this is normal
+        if (state === 2) {
+          console.log("[stream-monitor] SSE connection closed (this is normal during development hot reload)");
+          setIsConnected(false);
+          eventSource.close();
+          eventSourceRef.current = null;
+        } else {
+          console.error("[stream-monitor] SSE error:", error);
+          console.error("[stream-monitor] EventSource readyState:", state);
         }
-
-        console.log("[stream-monitor] Received update:", update);
-        setUpdates((prev) => [...prev, update]);
-      } catch (error) {
-        console.error("[stream-monitor] Failed to parse update:", error);
-      }
-    };
-
-    eventSource.onerror = () => {
-      console.error("[stream-monitor] SSE error");
+      };
+    } catch (error) {
+      console.error("[stream-monitor] Failed to create EventSource:", error);
       setIsConnected(false);
-      eventSource.close();
-      eventSourceRef.current = null;
-    };
+    }
   };
 
   // Disconnect from SSE
   const disconnect = () => {
     if (eventSourceRef.current) {
-      console.log("[stream-monitor] Disconnecting from SSE");
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
+      console.log("[stream-monitor] Manually disconnecting from SSE");
+      const es = eventSourceRef.current;
+      eventSourceRef.current = null; // Clear ref first to prevent reconnection attempts
+      es.close();
       setIsConnected(false);
     }
   };
@@ -100,12 +118,25 @@ export function StreamMonitor({
 
   // Auto-connect on mount if enabled
   useEffect(() => {
-    if (autoConnect) {
-      connect();
+    let mounted = true;
+
+    if (autoConnect && mounted) {
+      // Small delay to prevent double-mounting issues in React strict mode
+      const timer = setTimeout(() => {
+        if (mounted) {
+          connect();
+        }
+      }, 100);
+
+      return () => {
+        mounted = false;
+        clearTimeout(timer);
+        disconnect();
+      };
     }
 
     return () => {
-      disconnect();
+      mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoConnect]);
@@ -153,45 +184,75 @@ export function StreamMonitor({
     }
   };
 
+  const webhookUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/stream/update`
+      : "http://localhost:3000/api/stream/update";
+
+  const copyWebhookUrl = () => {
+    navigator.clipboard.writeText(webhookUrl);
+    // Could add a toast notification here
+    console.log("Webhook URL copied to clipboard!");
+  };
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="border-b p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold">Stream Monitor</h2>
-          <div className="flex items-center gap-2">
-            <div
-              className={`w-2 h-2 rounded-full ${
-                isConnected ? "bg-green-500" : "bg-red-500"
-              }`}
-            />
-            <span className="text-sm text-muted-foreground">
-              {isConnected ? "Connected" : "Disconnected"}
-            </span>
+      <div className="border-b p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold">Stream Monitor</h2>
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  isConnected ? "bg-green-500" : "bg-red-500"
+                }`}
+              />
+              <span className="text-sm text-muted-foreground">
+                {isConnected ? "Connected" : "Disconnected"}
+              </span>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {!isConnected && (
+              <button
+                onClick={connect}
+                className="px-3 py-1 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90"
+              >
+                Connect
+              </button>
+            )}
+            {isConnected && (
+              <button
+                onClick={disconnect}
+                className="px-3 py-1 text-sm bg-destructive text-destructive-foreground rounded hover:bg-destructive/90"
+              >
+                Disconnect
+              </button>
+            )}
+            <button
+              onClick={clearUpdates}
+              className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/80"
+            >
+              Clear
+            </button>
           </div>
         </div>
-        <div className="flex gap-2">
-          {!isConnected && (
-            <button
-              onClick={connect}
-              className="px-3 py-1 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90"
-            >
-              Connect
-            </button>
-          )}
-          {isConnected && (
-            <button
-              onClick={disconnect}
-              className="px-3 py-1 text-sm bg-destructive text-destructive-foreground rounded hover:bg-destructive/90"
-            >
-              Disconnect
-            </button>
-          )}
+        
+        {/* Webhook URL */}
+        <div className="bg-muted rounded p-2 flex items-center gap-2">
+          <span className="text-xs text-muted-foreground font-medium">
+            n8n Webhook URL:
+          </span>
+          <code className="flex-1 text-xs bg-background px-2 py-1 rounded font-mono">
+            {webhookUrl}
+          </code>
           <button
-            onClick={clearUpdates}
-            className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/80"
+            onClick={copyWebhookUrl}
+            className="px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90"
+            title="Copy to clipboard"
           >
-            Clear
+            Copy
           </button>
         </div>
       </div>
