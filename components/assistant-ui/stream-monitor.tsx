@@ -107,17 +107,24 @@ export function StreamMonitor({
     return () => {
       disconnect();
     };
-  }, [autoConnect, connectionType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoConnect]);
 
   // Update connection type when executionIds change
   useEffect(() => {
-    setConnectionType(executionIds.length > 0 ? "filtered" : "all");
+    const newConnectionType = executionIds.length > 0 ? "filtered" : "all";
     
-    // Reconnect if already connected
-    if (eventSourceRef.current) {
-      disconnect();
-      setTimeout(() => connect(), 100);
+    // Only reconnect if connection type actually changed
+    if (newConnectionType !== connectionType) {
+      setConnectionType(newConnectionType);
+      
+      // Reconnect if already connected
+      if (eventSourceRef.current) {
+        disconnect();
+        setTimeout(() => connect(), 100);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [executionIds]);
 
   const getStatusColor = (status: string): string => {
