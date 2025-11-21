@@ -6,13 +6,22 @@
 import type { StreamUpdate, StreamingCallbacks } from "./types";
 import { getStreamingServerUrl, getStreamingConnectionType } from "./config";
 
-// Simple logger utility
+// Simple logger utility for browser console
 const logger = {
   info: (message: string, ...args: unknown[]) => {
-    console.log(`[n8n-streaming] ${message}`, ...args);
+    if (typeof window !== 'undefined') {
+      console.log(`[n8n-streaming] ${message}`, ...args);
+    }
   },
   error: (message: string, error?: unknown) => {
-    console.error(`[n8n-streaming] ${message}`, error);
+    if (typeof window !== 'undefined') {
+      console.error(`[n8n-streaming] ${message}`, error);
+    }
+  },
+  warn: (message: string, ...args: unknown[]) => {
+    if (typeof window !== 'undefined') {
+      console.warn(`[n8n-streaming] ${message}`, ...args);
+    }
   },
 };
 
@@ -53,6 +62,8 @@ export class StreamingClient {
       return;
     }
 
+    logger.info(`Attempting to connect to streaming server: ${this.serverUrl}`);
+    logger.info(`Connection type: ${this.connectionType}`);
     this.isConnecting = true;
 
     try {
@@ -63,9 +74,9 @@ export class StreamingClient {
       }
       this.isConnected = true;
       this.reconnectAttempts = 0;
-      logger.info("Connected to streaming server");
+      logger.info("✅ Successfully connected to streaming server");
     } catch (error) {
-      logger.error("Failed to connect:", error);
+      logger.error("❌ Failed to connect to streaming server:", error);
       this.isConnected = false;
       this.scheduleReconnect();
     } finally {
@@ -80,36 +91,39 @@ export class StreamingClient {
     return new Promise((resolve, reject) => {
       try {
         const wsUrl = this.serverUrl.replace(/^http/, "ws") + "/stream/ws";
-        logger.info(`Connecting to WebSocket: ${wsUrl}`);
+        logger.info(`🔌 Connecting to WebSocket: ${wsUrl}`);
         
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
-          logger.info("WebSocket connected");
+          logger.info("✅ WebSocket connection established");
           resolve();
         };
 
         this.ws.onmessage = (event) => {
           try {
             const update: StreamUpdate = JSON.parse(event.data);
+            logger.info(`📨 Received WebSocket message for execution: ${update.executionId}`);
             this.handleUpdate(update);
           } catch (error) {
-            logger.error("Failed to parse WebSocket message:", error);
+            logger.error("❌ Failed to parse WebSocket message:", error);
+            logger.error("Raw message:", event.data);
           }
         };
 
         this.ws.onerror = (error) => {
-          logger.error("WebSocket error:", error);
+          logger.error("❌ WebSocket error:", error);
           reject(error);
         };
 
-        this.ws.onclose = () => {
-          logger.info("WebSocket disconnected");
+        this.ws.onclose = (event) => {
+          logger.warn(`🔌 WebSocket disconnected (code: ${event.code}, reason: ${event.reason || 'none'})`);
           this.isConnected = false;
           this.ws = null;
           this.scheduleReconnect();
         };
       } catch (error) {
+        logger.error("❌ Failed to create WebSocket:", error);
         reject(error);
       }
     });
@@ -122,26 +136,28 @@ export class StreamingClient {
     return new Promise((resolve, reject) => {
       try {
         const sseUrl = `${this.serverUrl}/stream/sse/default`;
-        logger.info(`Connecting to SSE: ${sseUrl}`);
+        logger.info(`🔌 Connecting to SSE: ${sseUrl}`);
         
         this.eventSource = new EventSource(sseUrl);
 
         this.eventSource.onopen = () => {
-          logger.info("SSE connected");
+          logger.info("✅ SSE connection established");
           resolve();
         };
 
         this.eventSource.onmessage = (event) => {
           try {
             const update: StreamUpdate = JSON.parse(event.data);
+            logger.info(`📨 Received SSE message for execution: ${update.executionId}`);
             this.handleUpdate(update);
           } catch (error) {
-            logger.error("Failed to parse SSE message:", error);
+            logger.error("❌ Failed to parse SSE message:", error);
+            logger.error("Raw message:", event.data);
           }
         };
 
         this.eventSource.onerror = (error) => {
-          logger.error("SSE error:", error);
+          logger.error("❌ SSE error:", error);
           this.isConnected = false;
           this.eventSource?.close();
           this.eventSource = null;
@@ -149,6 +165,7 @@ export class StreamingClient {
           reject(error);
         };
       } catch (error) {
+        logger.error("❌ Failed to create EventSource:", error);
         reject(error);
       }
     });
@@ -159,17 +176,19 @@ export class StreamingClient {
    */
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      logger.error("Max reconnection attempts reached");
+      logger.error(`❌ Max reconnection attempts (${this.maxReconnectAttempts}) reached. Giving up.`);
+      logger.error("Please check that the streaming server is running at:", this.serverUrl);
       return;
     }
 
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts);
     this.reconnectAttempts++;
 
-    logger.info(`Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
+    logger.warn(`🔄 Scheduling reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`);
     
     setTimeout(() => {
       if (!this.isConnected && !this.isConnecting) {
+        logger.info(`🔄 Attempting reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
         this.connect();
       }
     }, delay);
@@ -179,11 +198,16 @@ export class StreamingClient {
    * Handle incoming update
    */
   private handleUpdate(update: StreamUpdate): void {
-    logger.info(`Received update for execution: ${update.executionId}, stage: ${update.stage}, status: ${update.status}`);
+    logger.info(`📬 Update received - Execution: ${update.executionId}, Stage: ${update.stage}, Status: ${update.status}`);
+    logger.info(`   Message: ${update.message}`);
+    if (update.data && Object.keys(update.data).length > 0) {
+      logger.info(`   Data:`, update.data);
+    }
 
     const subscription = this.subscriptions.get(update.executionId);
     if (!subscription) {
-      logger.info(`No subscription found for execution: ${update.executionId}`);
+      logger.warn(`⚠️ No subscription found for execution: ${update.executionId}`);
+      logger.info(`Active subscriptions: ${Array.from(this.subscriptions.keys()).join(', ') || 'none'}`);
       return;
     }
 
@@ -192,19 +216,22 @@ export class StreamingClient {
     // Call onUpdate callback
     if (callbacks.onUpdate) {
       try {
+        logger.info(`🔔 Calling onUpdate callback for execution: ${update.executionId}`);
         callbacks.onUpdate(update);
       } catch (error) {
-        logger.error("Error in onUpdate callback:", error);
+        logger.error("❌ Error in onUpdate callback:", error);
       }
     }
 
     // Handle completion
     if (update.status === "completed") {
+      logger.info(`✅ Workflow completed: ${update.executionId}`);
       if (callbacks.onComplete) {
         try {
+          logger.info(`🔔 Calling onComplete callback for execution: ${update.executionId}`);
           callbacks.onComplete(update.data, update.executionId);
         } catch (error) {
-          logger.error("Error in onComplete callback:", error);
+          logger.error("❌ Error in onComplete callback:", error);
         }
       }
       // Unsubscribe after completion
@@ -213,11 +240,13 @@ export class StreamingClient {
 
     // Handle errors
     if (update.status === "error") {
+      logger.error(`❌ Workflow error: ${update.executionId} - ${update.message}`);
       if (callbacks.onError) {
         try {
+          logger.info(`🔔 Calling onError callback for execution: ${update.executionId}`);
           callbacks.onError(update.message, update.executionId);
         } catch (error) {
-          logger.error("Error in onError callback:", error);
+          logger.error("❌ Error in onError callback:", error);
         }
       }
       // Unsubscribe after error
@@ -229,16 +258,23 @@ export class StreamingClient {
    * Subscribe to updates for a specific execution
    */
   subscribe(executionId: string, callbacks: StreamingCallbacks): void {
-    logger.info(`Subscribing to execution: ${executionId}`);
+    logger.info(`📝 Subscribing to execution: ${executionId}`);
     
     this.subscriptions.set(executionId, {
       executionId,
       callbacks,
     });
 
+    logger.info(`Active subscriptions: ${this.subscriptions.size}`);
+
     // Ensure we're connected
     if (!this.isConnected && !this.isConnecting) {
+      logger.info("Not connected, initiating connection...");
       this.connect();
+    } else if (this.isConnected) {
+      logger.info("Already connected to streaming server");
+    } else {
+      logger.info("Connection in progress...");
     }
   }
 
@@ -246,29 +282,36 @@ export class StreamingClient {
    * Unsubscribe from execution updates
    */
   unsubscribe(executionId: string): void {
-    logger.info(`Unsubscribing from execution: ${executionId}`);
+    logger.info(`🗑️ Unsubscribing from execution: ${executionId}`);
     this.subscriptions.delete(executionId);
+    logger.info(`Remaining subscriptions: ${this.subscriptions.size}`);
   }
 
   /**
    * Disconnect from streaming server
    */
   disconnect(): void {
-    logger.info("Disconnecting from streaming server");
+    logger.info("🔌 Disconnecting from streaming server");
     
     if (this.ws) {
+      logger.info("Closing WebSocket connection");
       this.ws.close();
       this.ws = null;
     }
 
     if (this.eventSource) {
+      logger.info("Closing SSE connection");
       this.eventSource.close();
       this.eventSource = null;
     }
 
     this.isConnected = false;
     this.isConnecting = false;
+    
+    const subCount = this.subscriptions.size;
     this.subscriptions.clear();
+    
+    logger.info(`✅ Disconnected. Cleared ${subCount} subscription(s)`);
   }
 
   /**

@@ -199,31 +199,37 @@ export async function callWebhook(
 
     // Handle streaming mode - return immediately with IDs and set up callbacks
     if (streamingCallbacks) {
-      logger.info("Streaming mode enabled");
+      logger.info("🔴 Streaming mode enabled");
+      logger.info(`Execution ID from header: ${executionIdFromHeader}`);
+      logger.info(`Execution ID from data: ${executionIdFromData}`);
+      logger.info(`Workflow ID: ${workflowId}`);
       
       // If no execution ID in response, try to find it via API lookup
       if (!executionId) {
-        logger.info("No execution ID found in response, attempting API lookup");
+        logger.info("⚠️ No execution ID found in response, attempting API lookup...");
         executionId = await findExecutionViaApi(workflowId, startTime);
       }
 
       if (executionId) {
-        logger.info(`Setting up streaming for execution: ${executionId}`);
+        logger.info(`✅ Setting up streaming for execution: ${executionId}`);
         
         // Call onStart callback immediately
         if (streamingCallbacks.onStart) {
           try {
+            logger.info(`🔔 Calling onStart callback with execution ID: ${executionId}`);
             streamingCallbacks.onStart(executionId, workflowId || undefined);
           } catch (error) {
-            logger.error("Error in onStart callback:", error);
+            logger.error("❌ Error in onStart callback:", error);
           }
         }
 
         // Subscribe to streaming updates
+        logger.info("📡 Subscribing to streaming client...");
         const streamingClient = getStreamingClient();
         streamingClient.subscribe(executionId, streamingCallbacks);
 
         // Return immediately with execution IDs
+        logger.info("✅ Returning immediate response with execution IDs");
         return {
           success: true,
           executionId,
@@ -238,13 +244,17 @@ export async function callWebhook(
       } else {
         // Could not find execution ID, call onError
         const errorMsg = "Could not determine execution ID for streaming";
-        logger.error(errorMsg);
+        logger.error(`❌ ${errorMsg}`);
+        logger.error("This may happen if:");
+        logger.error("  1. N8N_API_KEY is not configured");
+        logger.error("  2. n8n webhook doesn't return execution ID");
+        logger.error("  3. Workflow hasn't started yet");
         
         if (streamingCallbacks.onError) {
           try {
             streamingCallbacks.onError(errorMsg);
           } catch (error) {
-            logger.error("Error in onError callback:", error);
+            logger.error("❌ Error in onError callback:", error);
           }
         }
 
