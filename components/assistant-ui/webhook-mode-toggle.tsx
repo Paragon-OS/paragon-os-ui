@@ -6,7 +6,6 @@ import { getWebhookMode, setWebhookMode, type WebhookMode } from "@/lib/webhook-
 export function WebhookModeToggle() {
   const [mode, setMode] = useState<WebhookMode>("test");
   const [isLoading, setIsLoading] = useState(true);
-  const [justChanged, setJustChanged] = useState(false);
 
   // Load mode from cookies on mount
   useEffect(() => {
@@ -19,11 +18,6 @@ export function WebhookModeToggle() {
     const newMode: WebhookMode = mode === "test" ? "production" : "test";
     setMode(newMode);
     setWebhookMode(newMode);
-    setJustChanged(true);
-    
-    // Show the "changed" indicator for 3 seconds
-    setTimeout(() => setJustChanged(false), 3000);
-    
     console.log(`[WebhookModeToggle] Switched to ${newMode} mode. Send a new message to use this mode.`);
   };
 
@@ -45,11 +39,6 @@ export function WebhookModeToggle() {
       >
         {mode === "test" ? "🧪 Test" : "🚀 Production"}
       </button>
-      {justChanged && (
-        <span className="text-xs text-muted-foreground animate-pulse">
-          ✓ Mode updated
-        </span>
-      )}
     </div>
   );
 }
