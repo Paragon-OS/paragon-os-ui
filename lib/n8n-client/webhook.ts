@@ -11,17 +11,11 @@ import {
   extractWorkflowIdFromUrl,
 } from "./webhook-utils";
 import {
-  findLatestExecution,
-  findLatestExecutionByTime,
+  findExecutionViaApi,
   pollExecutionStatus,
 } from "./execution";
 import { getStreamingClient } from "./streaming";
-import {
-  EXECUTION_LOOKUP_BUFFER_MS,
-  MAX_WORKFLOW_ID_ATTEMPTS,
-  MAX_TIME_BASED_ATTEMPTS,
-  SYNC_RESPONSE_THRESHOLD_MS,
-} from "./constants";
+import { SYNC_RESPONSE_THRESHOLD_MS } from "./constants";
 
 // Simple logger utility
 const logger = {
@@ -32,66 +26,6 @@ const logger = {
     console.error(`[n8n-webhook] ${message}`, error);
   },
 };
-
-/**
- * Attempt to find execution ID via API lookup
- */
-async function findExecutionViaApi(
-  workflowId: string | null,
-  startTime: number,
-): Promise<string | null> {
-  const hasApiKey = !!process.env.N8N_API_KEY;
-  logger.info(`API key configured: ${hasApiKey}`);
-
-  if (!hasApiKey) {
-    logger.info("Skipping API lookup - no API key configured");
-    logger.info("To track executions, either:");
-    logger.info("  1. Set N8N_API_KEY in .env.local");
-    logger.info("  2. Configure webhook to 'Wait for Webhook Response' mode in n8n");
-    if (workflowId) {
-      logger.info(`  3. Use workflow ID: ${workflowId}`);
-    }
-    return null;
-  }
-
-  logger.info("Attempting to find execution via API lookup");
-
-  if (workflowId) {
-    // Try multiple times with increasing delays
-    for (let attempt = 0; attempt < MAX_WORKFLOW_ID_ATTEMPTS; attempt++) {
-      logger.info(`Attempt ${attempt + 1} to find execution by workflow ID`);
-      await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
-
-      const executionId = await findLatestExecution(
-        workflowId,
-        new Date(startTime - EXECUTION_LOOKUP_BUFFER_MS),
-      );
-
-      if (executionId) {
-        logger.info(`Found execution ID: ${executionId}`);
-        return executionId;
-      }
-    }
-  } else {
-    // Fallback: try to find any recent execution by time
-    logger.info("No workflow ID, trying to find by time");
-    for (let attempt = 0; attempt < MAX_TIME_BASED_ATTEMPTS; attempt++) {
-      logger.info(`Attempt ${attempt + 1} to find execution by time`);
-      await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
-
-      const executionId = await findLatestExecutionByTime(
-        new Date(startTime - EXECUTION_LOOKUP_BUFFER_MS),
-      );
-
-      if (executionId) {
-        logger.info(`Found execution ID: ${executionId}`);
-        return executionId;
-      }
-    }
-  }
-
-  return null;
-}
 
 /**
  * Handle async response when execution ID could not be found
