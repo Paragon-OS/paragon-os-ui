@@ -6,10 +6,117 @@
 import { streamingStore } from "@/lib/streaming-store";
 import { NextRequest, NextResponse } from "next/server";
 import type { StreamUpdate } from "@/lib/n8n-client/types";
+import { getN8nBaseUrl, getWebhookBaseUrl } from "@/lib/n8n-client/config";
 
 export const runtime = "nodejs";
 
+/**
+ * Get allowed CORS origins based on environment configuration
+ * In production, restricts to specific origins. In development, allows localhost.
+ */
+function getAllowedOrigins(request: NextRequest): string[] {
+  const origins: string[] = [];
+  
+  // 1. Check for explicitly allowed origins from environment variable
+  const allowedOriginsEnv = process.env.ALLOWED_CORS_ORIGINS;
+  if (allowedOriginsEnv) {
+    origins.push(...allowedOriginsEnv.split(",").map(origin => origin.trim()));
+  }
+  
+  // 2. Add the app's own origin
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (appUrl) {
+    try {
+      const url = new URL(appUrl);
+      origins.push(url.origin);
+    } catch {
+      // Invalid URL, skip
+    }
+  }
+  
+  // 3. Add n8n instance origin (where webhook requests come from)
+  const n8nBaseUrl = getN8nBaseUrl();
+  if (n8nBaseUrl) {
+    try {
+      const url = new URL(n8nBaseUrl);
+      origins.push(url.origin);
+    } catch {
+      // Invalid URL, skip
+    }
+  }
+  
+  const webhookBaseUrl = getWebhookBaseUrl();
+  if (webhookBaseUrl) {
+    try {
+      const url = new URL(webhookBaseUrl);
+      origins.push(url.origin);
+    } catch {
+      // Invalid URL, skip
+    }
+  }
+  
+  // 4. In development, allow localhost origins
+  if (process.env.NODE_ENV !== "production") {
+    origins.push("http://localhost:3000", "http://localhost:5678", "http://127.0.0.1:3000", "http://127.0.0.1:5678");
+  }
+  
+  // Remove duplicates
+  return Array.from(new Set(origins));
+}
+
+/**
+ * Check if the request origin is allowed
+ */
+function isOriginAllowed(request: NextRequest): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin) {
+    // Same-origin requests don't have an Origin header
+    return true;
+  }
+  
+  const allowedOrigins = getAllowedOrigins(request);
+  return allowedOrigins.includes(origin);
+}
+
+/**
+ * Get CORS headers for the response
+ */
+function getCorsHeaders(request: NextRequest): Record<string, string> {
+  const origin = request.headers.get("origin");
+  const allowedOrigins = getAllowedOrigins(request);
+  
+  // If origin is provided and allowed, use it. Otherwise, use first allowed origin or deny
+  const allowOrigin = origin && allowedOrigins.includes(origin) 
+    ? origin 
+    : allowedOrigins.length > 0 
+      ? allowedOrigins[0] 
+      : "null";
+  
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, X-Execution-Id, X-N8N-Execution-Id",
+    "Access-Control-Max-Age": "86400", // 24 hours
+  };
+}
+
 export async function POST(request: NextRequest) {
+  // Check CORS origin
+  if (!isOriginAllowed(request)) {
+    const origin = request.headers.get("origin");
+    console.warn(`[update] CORS: Rejected request from origin: ${origin}`);
+    return NextResponse.json(
+      {
+        success: false,
+        error: "CORS: Origin not allowed",
+      },
+      {
+        status: 403,
+        headers: getCorsHeaders(request),
+      }
+    );
+  }
+
   try {
     const body = await request.json();
 
@@ -83,7 +190,10 @@ export async function POST(request: NextRequest) {
             "x-n8n-execution-id": request.headers.get("x-n8n-execution-id"),
           }
         },
-        { status: 400 }
+        { 
+          status: 400,
+          headers: getCorsHeaders(request),
+        }
       );
     }
 
@@ -112,6 +222,8 @@ export async function POST(request: NextRequest) {
       success: true,
       message: "Update broadcasted",
       executionId: update.executionId,
+    }, {
+      headers: getCorsHeaders(request),
     });
   } catch (error) {
     console.error("[update] Error processing update:", error);
@@ -120,20 +232,19 @@ export async function POST(request: NextRequest) {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: getCorsHeaders(request),
+      }
     );
   }
 }
 
 // Handle OPTIONS for CORS preflight
-export async function OPTIONS() {
+export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, {
     status: 200,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
+    headers: getCorsHeaders(request),
   });
 }
 
