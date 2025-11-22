@@ -5,6 +5,21 @@ import { callN8nWorkflow } from "@/lib/n8n-client";
 import { getWorkflowWebhookUrl } from "@/lib/n8n-config";
 import { getWebhookModeFromCookieHeader } from "@/lib/webhook-mode";
 import { getStreamingUpdateUrl } from "@/lib/n8n-client/config";
+import { NextResponse } from "next/server";
+
+/**
+ * Zod schema for validating chat request body
+ * Validates the messages array structure with flexible content formats
+ */
+const chatRequestSchema = z.object({
+  messages: z.array(
+    z.object({
+      role: z.enum(["user", "assistant", "system", "tool"]),
+      content: z.union([z.string(), z.array(z.unknown()), z.record(z.unknown())]).optional(),
+      parts: z.union([z.string(), z.array(z.unknown()), z.record(z.unknown())]).optional(),
+    }).passthrough() // Allow additional properties for flexibility
+  ).min(1, "Messages array must contain at least one message"),
+});
 
 /**
  * Extract chatInput from messages array
@@ -76,7 +91,38 @@ function extractChatInput(messages: UIMessage[]): string {
 }
 
 export async function POST(req: Request) {
-  const { messages }: { messages: UIMessage[] } = await req.json();
+  // Parse and validate request body
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch (error) {
+    console.error("[chat/route] Failed to parse request body as JSON:", error);
+    return NextResponse.json(
+      {
+        error: "Invalid JSON in request body",
+        message: error instanceof Error ? error.message : "Failed to parse request body",
+      },
+      { status: 400 }
+    );
+  }
+
+  // Validate request structure with Zod
+  const validationResult = chatRequestSchema.safeParse(body);
+  if (!validationResult.success) {
+    console.error("[chat/route] Request validation failed:", validationResult.error.format());
+    return NextResponse.json(
+      {
+        error: "Invalid request format",
+        details: validationResult.error.format(),
+        message: "The request body must contain a 'messages' array with at least one message object containing a 'role' field.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const { messages: validatedMessages } = validationResult.data;
+  // Cast to UIMessage[] for AI SDK compatibility (Zod validation ensures structure is correct)
+  const messages = validatedMessages as UIMessage[];
   
   // Get webhook mode from cookies
   const cookieHeader = req.headers.get("cookie");
@@ -152,10 +198,11 @@ export async function POST(req: Request) {
     },
   });
 
-  const result = streamText({
-    model: google("models/gemini-2.5-pro"),
-    messages: convertToModelMessages(messages),
-    system: `You are an assistant that helps users interact with ParagonOS, a messaging platform management system for Discord and Telegram.
+  try {
+    const result = streamText({
+      model: google("models/gemini-2.5-pro"),
+      messages: convertToModelMessages(messages),
+      system: `You are an assistant that helps users interact with ParagonOS, a messaging platform management system for Discord and Telegram.
 
 Your role:
 1. Use the conversation history to understand what the user is actually asking
@@ -175,10 +222,20 @@ Examples of good prompts to pass to ParagonOS:
 - "Search for messages about the token launch in the metarune-labs Discord channel"
 
 ParagonOS is capable of handling ambiguity in execution - your job is just to extract a clear, scoped task from the conversation.`,
-    tools: {
-      paragonOS,
-    },
-  });
+      tools: {
+        paragonOS,
+      },
+    });
 
-  return result.toUIMessageStreamResponse();
+    return result.toUIMessageStreamResponse();
+  } catch (error) {
+    console.error("[chat/route] Error processing chat request:", error);
+    return NextResponse.json(
+      {
+        error: "Failed to process chat request",
+        message: error instanceof Error ? error.message : "An unexpected error occurred",
+      },
+      { status: 500 }
+    );
+  }
 }
