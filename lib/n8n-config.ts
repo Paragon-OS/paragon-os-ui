@@ -76,14 +76,3 @@ export function getWorkflowDescription(workflowName: WorkflowName): string {
   const config = getWorkflowConfig(workflowName);
   return config?.description ?? "Unknown workflow";
 }
-
-/**
- * Get paragon-os webhook URL
- * Supports both test and production endpoints
- * Tries test endpoint first, falls back to production
- */
-export function getParagonosSendMessageWebhookUrl(useTest: boolean = true): string {
-  const baseUrl = process.env.N8N_BASE_URL || "http://localhost:5678";
-  const endpoint = useTest ? "/webhook-test/paragon-os" : "/webhook/paragon-os";
-  return `${baseUrl}${endpoint}`;
-}
