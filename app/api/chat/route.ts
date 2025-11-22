@@ -1,5 +1,6 @@
 import { google } from "@ai-sdk/google";
 import { streamText, UIMessage, convertToModelMessages, tool } from "ai";
+import { z } from "zod";
 import { callN8nWorkflow } from "@/lib/n8n-client";
 import {
   getWorkflowWebhookUrl,
@@ -89,21 +90,12 @@ export async function POST(req: Request) {
   };
 
   const paragonOS = tool({
-    description: getWorkflowDescription("paragonOS"),
-    parameters: {
-      type: "object",
-      properties: {
-        prompt: {
-          type: "string",
-          description: "The natural language request, question, or instruction from the user to be handled by ParagonOS. Examples: 'Check for unreplied messages', 'DM sebastian about the meeting', 'What is the status of the deployment?'.",
-        },
-      },
-      // Note: prompt is technically required, but we allow the model to skip it
-      // if it can't extract it, and we'll fallback to the user's last message.
-      required: [],
-    },
+    description: "Call ParagonOS to handle messaging operations on Discord and Telegram. Use this tool when the user wants to check messages, send DMs, search conversations, manage contacts, or perform any messaging-related task. Extract a clear, scoped task from the conversation context and pass it in natural language. ParagonOS will handle the execution planning and tool sequencing.",
+    inputSchema: z.object({
+      prompt: z.string().describe("A clear, scoped task extracted from the conversation context. Use the conversation history to understand what the user is actually asking, then formulate a specific, less-ambiguous task in natural language. Include relevant details like platform (Discord/Telegram), channel/group names, contact names, time ranges, or topics when mentioned. Examples: 'Check for unreplied messages in the metarune management group on Telegram', 'Send a DM to sebastian on Discord about the deployment status', 'List all pending messages across both platforms', 'Search for messages about the token launch in metarune-labs Discord channel'."),
+    }),
     execute: async ({ prompt }: { prompt: string }) => {
-      // The prompt parameter is required, but we'll still have a fallback
+      // The prompt parameter is required by the schema
       let chatInput = prompt;
       
       // Validate the provided prompt
@@ -166,8 +158,28 @@ export async function POST(req: Request) {
   });
 
   const result = streamText({
-    model: google("models/gemini-2.5-flash"),
+    model: google("models/gemini-2.5-pro"),
     messages: convertToModelMessages(messages),
+    system: `You are an assistant that helps users interact with ParagonOS, a messaging platform management system for Discord and Telegram.
+
+Your role:
+1. Use the conversation history to understand what the user is actually asking
+2. Determine if the request can be achieved using ParagonOS (messaging operations like checking messages, sending DMs, searching conversations, managing contacts, etc.)
+3. If the request is ParagonOS-appropriate:
+   - Call the paragonOS tool with a clear, less-ambiguous, scoped task in natural language
+   - Extract the core intent from the conversation context
+   - Make it specific (include platform, channel/group names, contact names, time ranges, etc. when mentioned)
+   - Keep it natural language - don't over-process it
+4. If the request is NOT about messaging operations or is a general question:
+   - Respond directly without calling the tool
+
+Examples of good prompts to pass to ParagonOS:
+- "Check for unreplied messages in the metarune management group on Telegram"
+- "Send a DM to sebastian on Discord asking about the deployment status"
+- "List all pending messages that need replies across both Discord and Telegram"
+- "Search for messages about the token launch in the metarune-labs Discord channel"
+
+ParagonOS is capable of handling ambiguity in execution - your job is just to extract a clear, scoped task from the conversation.`,
     tools: {
       paragonOS,
     },
