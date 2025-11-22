@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { StreamMonitor } from "@/components/assistant-ui/stream-monitor";
 import { StreamingProvider } from "@/components/assistant-ui/streaming-context";
+import { WebhookModeToggle } from "@/components/assistant-ui/webhook-mode-toggle";
 
 export const Assistant = () => {
   const [activeTab, setActiveTab] = useState<"chat" | "monitor">("chat");
@@ -61,7 +62,9 @@ export const Assistant = () => {
                     </BreadcrumbItem>
                   </BreadcrumbList>
                 </Breadcrumb>
-                <div className="ml-auto flex gap-2">
+                <div className="ml-auto flex gap-3 items-center">
+                  <WebhookModeToggle />
+                  <Separator orientation="vertical" className="h-4" />
                   <button
                     onClick={() => setActiveTab("chat")}
                     className={`px-3 py-1.5 text-sm rounded transition-colors ${

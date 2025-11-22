@@ -9,6 +9,7 @@ import { callWebhook } from "./webhook";
 import { callLocalApi } from "./api";
 import { getWebhookBaseUrl, getN8nBaseUrl } from "./config";
 import { getStreamingClient, createStreamingClient } from "./streaming";
+import { getWebhookPrefix, type WebhookMode } from "../webhook-mode";
 
 /**
  * Main function to call an n8n workflow
@@ -48,15 +49,34 @@ export async function callN8nWorkflow(
 
 /**
  * Build a webhook URL from a webhook path
+ * @param webhookPath - The path to append (e.g., "/paragon-os")
+ * @param mode - The webhook mode: "test" uses /webhook-test, "production" uses /webhook
  */
-export function buildWebhookUrl(webhookPath: string): string {
+export function buildWebhookUrl(webhookPath: string, mode: WebhookMode = "test"): string {
   const webhookBaseUrl = getWebhookBaseUrl();
+  const prefix = getWebhookPrefix(mode);
+  
+  console.log(`[buildWebhookUrl] mode=${mode}, prefix=${prefix}, webhookBaseUrl=${webhookBaseUrl}`);
+  
   if (webhookBaseUrl) {
-    return `${webhookBaseUrl}${webhookPath.startsWith("/") ? webhookPath : `/${webhookPath}`}`;
+    // If N8N_WEBHOOK_BASE_URL is set, check if it already includes a webhook prefix
+    // If it ends with /webhook or /webhook-test, replace it with the mode-specific prefix
+    let baseUrl = webhookBaseUrl;
+    if (baseUrl.endsWith("/webhook") || baseUrl.endsWith("/webhook-test")) {
+      // Remove the existing prefix
+      baseUrl = baseUrl.replace(/\/webhook(-test)?$/, "");
+      console.log(`[buildWebhookUrl] Stripped existing prefix, baseUrl=${baseUrl}`);
+    }
+    const finalUrl = `${baseUrl}${prefix}${webhookPath.startsWith("/") ? webhookPath : `/${webhookPath}`}`;
+    console.log(`[buildWebhookUrl] Final URL (with N8N_WEBHOOK_BASE_URL): ${finalUrl}`);
+    return finalUrl;
   }
-  // Fallback to local n8n webhook URL
+  
+  // Fallback to local n8n webhook URL with mode-specific prefix
   const baseUrl = getN8nBaseUrl();
-  return `${baseUrl}/webhook${webhookPath.startsWith("/") ? webhookPath : `/${webhookPath}`}`;
+  const finalUrl = `${baseUrl}${prefix}${webhookPath.startsWith("/") ? webhookPath : `/${webhookPath}`}`;
+  console.log(`[buildWebhookUrl] Final URL (with N8N_BASE_URL): ${finalUrl}`);
+  return finalUrl;
 }
 
 // Re-export types for convenience

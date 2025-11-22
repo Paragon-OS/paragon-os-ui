@@ -27,7 +27,10 @@ Add n8n configuration to your `.env.local`:
 ```
 # n8n Configuration
 N8N_BASE_URL=http://localhost:5678
-N8N_WEBHOOK_BASE_URL=http://localhost:5678/webhook
+
+# Optional: Override webhook base URL (not recommended when using mode switching)
+# N8N_WEBHOOK_BASE_URL=http://localhost:5678/webhook
+
 # Optional: API key for n8n API authentication
 # N8N_API_KEY=your-n8n-api-key
 
@@ -39,6 +42,12 @@ N8N_WEBHOOK_BASE_URL=http://localhost:5678/webhook
 # N8N_STREAMING_SERVER_URL=http://localhost:3000/api/stream
 # N8N_STREAMING_CONNECTION_TYPE=sse  # 'sse' or 'websocket' (default: sse)
 ```
+
+**Note**: For webhook mode switching (test vs production) to work properly, it's recommended to **NOT** set `N8N_WEBHOOK_BASE_URL`. The system will automatically construct the correct URL based on the selected mode:
+- Test mode: `http://localhost:5678/webhook-test/paragon-os`
+- Production mode: `http://localhost:5678/webhook/paragon-os`
+
+If you do set `N8N_WEBHOOK_BASE_URL`, the system will still respect the mode by replacing any `/webhook` or `/webhook-test` suffix with the mode-appropriate prefix.
 
 ### Setting Up Workflows
 

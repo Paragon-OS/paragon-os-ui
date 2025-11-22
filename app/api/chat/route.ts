@@ -6,6 +6,7 @@ import {
   getWorkflowWebhookUrl,
   getWorkflowDescription,
 } from "@/lib/n8n-config";
+import { getWebhookModeFromCookieHeader, type WebhookMode } from "@/lib/webhook-mode";
 
 /**
  * Extract chatInput from messages array
@@ -74,6 +75,11 @@ function extractChatInput(messages: UIMessage[]): string {
 export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json();
   
+  // Get webhook mode from cookies
+  const cookieHeader = req.headers.get("cookie");
+  const webhookMode = getWebhookModeFromCookieHeader(cookieHeader);
+  console.log(`[chat/route] 🔧 Webhook Mode: ${webhookMode}`);
+  
   // Get the base URL from the request for constructing stream URL
   const getStreamUrl = () => {
     if (process.env.NEXT_PUBLIC_APP_URL) {
@@ -128,7 +134,8 @@ export async function POST(req: Request) {
         streamUrl: streamUrl,
       };
       
-      const webhookUrl = getWorkflowWebhookUrl("paragonOS");
+      const webhookUrl = getWorkflowWebhookUrl("paragonOS", webhookMode);
+      console.log(`[chat/route] 🎯 Webhook URL: ${webhookUrl}`);
       if (!webhookUrl) {
         return {
           success: false,

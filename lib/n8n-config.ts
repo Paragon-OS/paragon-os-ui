@@ -4,6 +4,7 @@
  */
 
 import { buildWebhookUrl } from "./n8n-client";
+import { type WebhookMode } from "./webhook-mode";
 
 export interface WorkflowConfig {
   webhookPath?: string;
@@ -42,7 +43,10 @@ export function getWorkflowConfig(
 /**
  * Get webhook URL for a workflow
  */
-export function getWorkflowWebhookUrl(workflowName: WorkflowName): string | null {
+export function getWorkflowWebhookUrl(
+  workflowName: WorkflowName,
+  mode: WebhookMode = "test"
+): string | null {
   const config = getWorkflowConfig(workflowName);
   if (!config) return null;
 
@@ -51,7 +55,7 @@ export function getWorkflowWebhookUrl(workflowName: WorkflowName): string | null
   }
 
   if (config.webhookPath) {
-    return buildWebhookUrl(config.webhookPath);
+    return buildWebhookUrl(config.webhookPath, mode);
   }
 
   return null;
