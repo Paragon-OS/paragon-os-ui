@@ -46,22 +46,62 @@ export function getApiKey(): string | undefined {
 }
 
 /**
- * Get streaming server URL from environment variables
- * Defaults to Next.js API routes (/api/stream)
+ * Get streaming server base URL
+ * Unified function for consistent URL construction across the application
+ * 
+ * Priority order:
+ * 1. N8N_STREAMING_SERVER_URL env var (if set)
+ * 2. NEXT_PUBLIC_APP_URL env var (if set)
+ * 3. Request headers (host + protocol) if Request object provided
+ * 4. window.location.origin (if in browser)
+ * 5. localhost:3000 (fallback for development)
+ * 
+ * @param request - Optional Request object for server-side URL detection
+ * @returns Base URL for streaming server (e.g., "http://localhost:3000/api/stream")
  */
-export function getStreamingServerUrl(): string {
-  // If environment variable is set, use it
+export function getStreamingServerUrl(request?: Request): string {
+  // Priority 1: Explicit streaming server URL
   if (process.env.N8N_STREAMING_SERVER_URL) {
     return process.env.N8N_STREAMING_SERVER_URL;
   }
   
-  // In browser, use relative URL to current origin
+  // Priority 2: Next.js public app URL
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return `${process.env.NEXT_PUBLIC_APP_URL}/api/stream`;
+  }
+  
+  // Priority 3: Server-side with Request object - use headers
+  if (request) {
+    const host = request.headers.get("host");
+    const protocol = request.headers.get("x-forwarded-proto") || "http";
+    if (host) {
+      return `${protocol}://${host}/api/stream`;
+    }
+  }
+  
+  // Priority 4: Client-side - use window.location
   if (typeof window !== 'undefined') {
     return `${window.location.origin}/api/stream`;
   }
   
-  // On server, default to localhost (for SSR)
+  // Priority 5: Fallback to localhost for development
   return "http://localhost:3000/api/stream";
+}
+
+/**
+ * Get streaming update endpoint URL
+ * Returns the full URL to the /api/stream/update endpoint
+ * 
+ * @param request - Optional Request object for server-side URL detection
+ * @returns Full URL to update endpoint (e.g., "http://localhost:3000/api/stream/update")
+ */
+export function getStreamingUpdateUrl(request?: Request): string {
+  const baseUrl = getStreamingServerUrl(request);
+  // Ensure base URL doesn't already end with /update
+  if (baseUrl.endsWith('/update')) {
+    return baseUrl;
+  }
+  return `${baseUrl}/update`;
 }
 
 /**

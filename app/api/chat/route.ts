@@ -4,6 +4,7 @@ import { z } from "zod";
 import { callN8nWorkflow } from "@/lib/n8n-client";
 import { getWorkflowWebhookUrl } from "@/lib/n8n-config";
 import { getWebhookModeFromCookieHeader } from "@/lib/webhook-mode";
+import { getStreamingUpdateUrl } from "@/lib/n8n-client/config";
 
 /**
  * Extract chatInput from messages array
@@ -81,21 +82,6 @@ export async function POST(req: Request) {
   const cookieHeader = req.headers.get("cookie");
   const webhookMode = getWebhookModeFromCookieHeader(cookieHeader);
   console.log(`[chat/route] 🔧 Webhook Mode: ${webhookMode}`);
-  
-  // Get the base URL from the request for constructing stream URL
-  const getStreamUrl = () => {
-    if (process.env.NEXT_PUBLIC_APP_URL) {
-      return `${process.env.NEXT_PUBLIC_APP_URL}/api/stream/update`;
-    }
-    // Try to get from request headers
-    const host = req.headers.get("host");
-    const protocol = req.headers.get("x-forwarded-proto") || "http";
-    if (host) {
-      return `${protocol}://${host}/api/stream/update`;
-    }
-    // Fallback to localhost for development
-    return "http://localhost:3000/api/stream/update";
-  };
 
   const paragonOS = tool({
     description: "Call ParagonOS to handle messaging operations on Discord and Telegram. Use this tool when the user wants to check messages, send DMs, search conversations, manage contacts, or perform any messaging-related task. Extract a clear, scoped task from the conversation context and pass it in natural language. ParagonOS will handle the execution planning and tool sequencing.",
@@ -122,8 +108,8 @@ export async function POST(req: Request) {
       
       console.log("[paragonOS] Using chatInput (length:", chatInput.length, "):", chatInput.substring(0, 100));
       
-      // Get the stream URL for updates
-      const streamUrl = getStreamUrl();
+      // Get the stream URL for updates using unified URL construction
+      const streamUrl = getStreamingUpdateUrl(req);
       
       // Prepare payload in the format N8N webhook expects
       const payload = {
