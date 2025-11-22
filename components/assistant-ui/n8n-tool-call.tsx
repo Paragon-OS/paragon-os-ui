@@ -50,15 +50,17 @@ export const N8nToolCall: ToolCallMessagePartComponent = ({
     if (typeof result === "string") {
       try {
         resultData = JSON.parse(result);
-        resultSuccess = resultData.success !== false;
-        resultError = resultData.error || null;
+        const parsed = resultData as Record<string, unknown>;
+        resultSuccess = parsed.success !== false;
+        resultError = (typeof parsed.error === "string" ? parsed.error : null) || null;
       } catch {
         resultData = result;
       }
     } else {
       resultData = result;
-      resultSuccess = resultData?.success !== false;
-      resultError = resultData?.error || null;
+      const dataObj = resultData && typeof resultData === "object" ? resultData as Record<string, unknown> : null;
+      resultSuccess = dataObj?.success !== false;
+      resultError = (dataObj && typeof dataObj.error === "string" ? dataObj.error : null) || null;
     }
   }
 

@@ -56,7 +56,6 @@ export async function POST(request: NextRequest) {
       console.error("[update] Full body:", JSON.stringify(body, null, 2));
       
       const receivedKeys = Object.keys(body);
-      const hasTimestamp = receivedKeys.includes("timestamp");
       
       return NextResponse.json(
         { 

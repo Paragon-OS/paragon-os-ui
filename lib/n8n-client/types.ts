@@ -61,6 +61,12 @@ export interface N8nExecution {
     resultData?: {
       runData?: Record<string, unknown[]>;
     };
+    error?: {
+      message?: string;
+      error?: {
+        message?: string;
+      };
+    };
   };
 }
 

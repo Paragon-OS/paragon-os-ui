@@ -107,7 +107,6 @@ export function StreamingProvider({ children }: StreamingProviderProps) {
       console.log("[streaming-context] Provider unmounting, disconnecting...");
       disconnect();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Prevent Cmd+S / Ctrl+S from triggering browser save (which closes connection)

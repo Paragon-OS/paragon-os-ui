@@ -16,12 +16,12 @@ import {
   pollExecutionStatus,
 } from "./execution";
 import { getStreamingClient } from "./streaming";
-
-// Constants
-const EXECUTION_LOOKUP_BUFFER_MS = 10000; // 10 seconds buffer for timing issues
-const MAX_WORKFLOW_ID_ATTEMPTS = 5;
-const MAX_TIME_BASED_ATTEMPTS = 3;
-const SYNC_RESPONSE_THRESHOLD_MS = 5000; // Consider response sync if it took > 5s
+import {
+  EXECUTION_LOOKUP_BUFFER_MS,
+  MAX_WORKFLOW_ID_ATTEMPTS,
+  MAX_TIME_BASED_ATTEMPTS,
+  SYNC_RESPONSE_THRESHOLD_MS,
+} from "./constants";
 
 // Simple logger utility
 const logger = {

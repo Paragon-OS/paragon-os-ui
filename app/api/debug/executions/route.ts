@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
               })
             : [],
           // Include error data if present
-          error: exec.data?.error || exec.fullData?.error,
+          error: exec.data?.error || (exec.fullData && typeof exec.fullData === "object" && "error" in exec.fullData ? (exec.fullData as { error?: unknown }).error : undefined),
           // Include full data if requested
           fullData: includeDetails ? exec.fullData : undefined,
         })),

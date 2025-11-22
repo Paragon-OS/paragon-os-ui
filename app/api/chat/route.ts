@@ -2,11 +2,8 @@ import { google } from "@ai-sdk/google";
 import { streamText, UIMessage, convertToModelMessages, tool } from "ai";
 import { z } from "zod";
 import { callN8nWorkflow } from "@/lib/n8n-client";
-import {
-  getWorkflowWebhookUrl,
-  getWorkflowDescription,
-} from "@/lib/n8n-config";
-import { getWebhookModeFromCookieHeader, type WebhookMode } from "@/lib/webhook-mode";
+import { getWorkflowWebhookUrl } from "@/lib/n8n-config";
+import { getWebhookModeFromCookieHeader } from "@/lib/webhook-mode";
 
 /**
  * Extract chatInput from messages array
@@ -34,19 +31,21 @@ function extractChatInput(messages: UIMessage[]): string {
 
   // Extract content from the last user message
   // Handle both 'content' and 'parts' fields (different message formats)
-  const messageData = (lastUserMessage as any).parts || (lastUserMessage as any).content;
+  const messageRecord = lastUserMessage as unknown as Record<string, unknown>;
+  const messageData = messageRecord.parts || messageRecord.content;
   
   let content = "";
   if (typeof messageData === "string") {
     content = messageData;
   } else if (Array.isArray(messageData)) {
     content = messageData
-      .map((part: any) => {
+      .map((part: unknown) => {
         if (typeof part === "string") return part;
         // Handle various object structures for text parts
         if (part && typeof part === "object") {
-          if (part.type === "text" && part.text) return part.text;
-          if (part.text) return part.text;
+          const partObj = part as Record<string, unknown>;
+          if (partObj.type === "text" && typeof partObj.text === "string") return partObj.text;
+          if (typeof partObj.text === "string") return partObj.text;
           // Fallback for other structures
           return JSON.stringify(part);
         }
@@ -56,9 +55,12 @@ function extractChatInput(messages: UIMessage[]): string {
       .join("");
   } else if (messageData && typeof messageData === "object") {
     // Handle case where content/parts is a single object (not array)
-    const contentObj = messageData as any;
-    if (contentObj.text) content = contentObj.text;
-    else content = JSON.stringify(contentObj);
+    const contentObj = messageData as Record<string, unknown>;
+    if (typeof contentObj.text === "string") {
+      content = contentObj.text;
+    } else {
+      content = JSON.stringify(contentObj);
+    }
   }
 
   if (content && content.trim() !== "") {

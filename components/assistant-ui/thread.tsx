@@ -309,7 +309,7 @@ const AssistantMessage: FC = () => {
               tools: {
                 Fallback: ToolFallback,
                 paragonOS: N8nToolCall,
-              },
+              } as Record<string, typeof N8nToolCall | typeof ToolFallback>,
             }}
           />
           <MessageError />

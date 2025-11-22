@@ -65,7 +65,7 @@ export async function GET(
       const keepAliveInterval = setInterval(() => {
         try {
           controller.enqueue(encoder.encode(": keep-alive\n\n"));
-        } catch (error) {
+        } catch {
           console.log(`[sse] Keep-alive failed, connection likely closed`);
           clearInterval(keepAliveInterval);
           streamingStore.removeConnection(executionId, connection);

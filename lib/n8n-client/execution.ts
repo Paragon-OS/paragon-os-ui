@@ -6,12 +6,6 @@
 import type { N8nExecution, N8nExecutionResponse, N8nWorkflowResponse } from "./types";
 import { getN8nBaseUrl, getPollInterval, getApiKey } from "./config";
 
-// Constants
-const EXECUTION_LOOKUP_BUFFER_MS = 10000; // 10 seconds buffer for timing issues
-const MAX_WORKFLOW_ID_ATTEMPTS = 5;
-const MAX_TIME_BASED_ATTEMPTS = 3;
-const MAX_RECURSION_DEPTH = 5;
-
 // Simple logger utility
 const logger = {
   info: (message: string, ...args: unknown[]) => {

@@ -3,8 +3,9 @@
  * Helper functions for parsing webhook responses and URLs
  */
 
+import { MAX_RECURSION_DEPTH } from "./constants";
+
 // Constants
-const MAX_RECURSION_DEPTH = 5;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EXECUTION_ID_FIELDS = ["executionId", "execution_id", "id", "execution"];
 
